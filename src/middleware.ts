@@ -15,6 +15,8 @@ export function middleware(req: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const dev = process.env.NODE_ENV !== "production";
 
+  // Exam Prep's marking screen shows the answer-sheet PDF beside the questions in a same-origin frame
+  const sameOriginFrames = req.nextUrl.pathname.startsWith("/exam-prep");
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
@@ -22,9 +24,9 @@ export function middleware(req: NextRequest) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src 'self'${dev ? " ws: wss:" : ""}`,
-    "frame-ancestors 'none'",
-    "frame-src 'none'",
-    "object-src 'none'",
+    sameOriginFrames ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
+    sameOriginFrames ? "frame-src 'self'" : "frame-src 'none'",
+    sameOriginFrames ? "object-src 'self'" : "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
     ...(dev || IS_LOOPBACK ? [] : ["upgrade-insecure-requests"]),

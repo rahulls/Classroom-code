@@ -23,7 +23,8 @@
     "exam-prep:generate": "prisma generate --schema prisma/exam-prep/schema.prisma",
     "exam-prep:migrate": "node scripts/exam-prep-migrate.mjs",
     "exam-prep:seed": "tsx --conditions=react-server src/modules/exam-prep/seed/seed.ts",
-    "test:exam-prep": "vitest run --config src/modules/exam-prep/vitest.config.mts"
+    "test:exam-prep": "vitest run --config src/modules/exam-prep/vitest.config.mts",
+    "exam-prep:gen-actions": "node scripts/exam-prep-gen-actions.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
