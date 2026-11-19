@@ -106,8 +106,8 @@ try {
   };
   await addQ({ section: "A (mcq)", type: "mcq", chapter: "Real Numbers", marks: 1, text: "Which of these is irrational?" });
   await addQ({ section: "A (mcq)", type: "mcq", chapter: "Polynomials", marks: 1, text: "Degree of a quadratic polynomial?" });
-  await addQ({ section: "C (long)", type: "long", chapter: "Quadratic Equations", marks: 4, text: "Solve x^2 - 5x + 6 = 0." });
-  await addQ({ section: "C (long)", type: "long", chapter: "Statistics", marks: 4, text: "Find the mean of 2, 4, 6, 8." });
+  await addQ({ section: "D (long)", type: "long", chapter: "Quadratic Equations", marks: 4, text: "Solve x^2 - 5x + 6 = 0." });
+  await addQ({ section: "D (long)", type: "long", chapter: "Statistics", marks: 4, text: "Find the mean of 2, 4, 6, 8." });
   await go("/exam-prep/papers/C10-MAT-P1-CBSE");
   ok((await page.getByText("Marks by chapter").innerText()).includes("Quadratic Equations 4"), "chapter totals shown");
   await page.getByRole("button", { name: "Publish" }).click();

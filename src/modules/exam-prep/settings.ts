@@ -118,11 +118,13 @@ export const SETTINGS = {
     label: "Board pattern templates",
     schema: z.record(z.string(), z.array(z.object({ name: z.string().min(1).max(4), type: z.enum(["mcq", "short", "long", "case", "assertion"]), label: z.string().max(80) }))),
     default: {
+      // The CBSE board paper: A 20 x 1 (MCQ + assertion-reason), B 5 x 2, C 6 x 3, D 4 x 5, E 3 x 4 (case-based)
       CBSE: [
-        { name: "A", type: "mcq", label: "MCQ and assertion-reason" },
-        { name: "B", type: "short", label: "Short answer" },
-        { name: "C", type: "long", label: "Long answer" },
-        { name: "D", type: "case", label: "Case-based" },
+        { name: "A", type: "mcq", label: "MCQ and assertion-reason (1 mark)" },
+        { name: "B", type: "short", label: "Very short answer (2 marks)" },
+        { name: "C", type: "short", label: "Short answer (3 marks)" },
+        { name: "D", type: "long", label: "Long answer (5 marks)" },
+        { name: "E", type: "case", label: "Case-based (4 marks)" },
       ],
       "ICSE-ISC": [
         { name: "A", type: "mcq", label: "Compulsory short and objective" },
