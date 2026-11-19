@@ -1,0 +1,649 @@
+// RSC Classroom: database schema.
+// Sections mirror the modules in src/modules/*. Every top-level table carries orgId
+// so a second branch/organisation can be added later without migration pain.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Platform ───────────────────────────────
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id                String     @id @default(uuid()) @db.Uuid
+  orgId             String     @default("rsc")
+  email             String     @unique // stored lowercase
+  name              String
+  passwordHash      String
+  isOwner           Boolean    @default(false)
+  status            UserStatus @default(ACTIVE)
+  totpSecretEnc     String? // AES-256-GCM encrypted
+  totpPendingEnc    String? // secret awaiting confirmation during setup
+  totpEnabledAt     DateTime?
+  totpLastStep      Int? // replay protection
+  failedLoginCount  Int        @default(0)
+  lockedUntil       DateTime?
+  passwordChangedAt DateTime   @default(now())
+  lastLoginAt       DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  sessions      Session[]
+  roles         UserRole[]
+  recoveryCodes RecoveryCode[]
+}
+
+model Role {
+  id          String     @id @default(uuid()) @db.Uuid
+  orgId       String     @default("rsc")
+  name        String
+  permissions String[]
+  isSystem    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  users       UserRole[]
+
+  @@unique([orgId, name])
+}
+
+model UserRole {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  roleId String @db.Uuid
+  /// {"all":true} | {"batches":[...]} | {"classrooms":[...]} | {"mentees":true}
+  scope  Json   @default("{\"all\":true}")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  tokenHash  String    @unique // SHA-256 of the cookie token; raw token never stored
+  userId     String    @db.Uuid
+  mfaPending Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  ip         String?
+  userAgent  String?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  kind      String // "email" | "ip" | "setup" | "mfa"
+  keyHash   String // HMAC of the email / IP, so raw identifiers aren't kept
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([kind, keyHash, createdAt])
+}
+
+model RecoveryCode {
+  id       String    @id @default(uuid()) @db.Uuid
+  userId   String    @db.Uuid
+  codeHash String
+  usedAt   DateTime?
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @default("rsc")
+  actorId   String?  @db.Uuid
+  actorName String?
+  action    String // e.g. "student.create", "auth.login.failed"
+  entity    String?
+  entityId  String?
+  before    Json?
+  after     Json?
+  ip        String?
+  userAgent String?
+  at        DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([at])
+  @@index([action])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?  @db.Uuid
+}
+
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+/// Transactional outbox: written in the same transaction as the change that caused it.
+model DomainEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  key         String
+  payload     Json
+  occurredAt  DateTime  @default(now())
+  processedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?
+
+  @@index([processedAt, occurredAt])
+}
+
+/// Configurable custom fields (student / mentor / batch / enquiry …).
+model FieldDefinition {
+  id         String    @id @default(uuid()) @db.Uuid
+  orgId      String    @default("rsc")
+  entity     String // "student" | "mentor" | "batch" | "enquiry"
+  scopeKey   String    @default("*") // program type key, or "*" for all
+  key        String
+  label      String
+  type       String // text|textarea|number|date|select|multiselect|checkbox|email|phone|url
+  options    String[]
+  required   Boolean   @default(false)
+  groupName  String    @default("General")
+  helpText   String?
+  order      Int       @default(0)
+  sensitive  Boolean   @default(false) // encrypted at rest, hidden from non-owner roles
+  validation Json?
+  showIf     Json?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([orgId, entity, scopeKey, key])
+}
+
+// ─────────────────────────────── Academics ───────────────────────────────
+
+enum LearnerKind {
+  MINOR
+  ADULT
+}
+
+model AcademicYear {
+  id         String        @id @default(uuid()) @db.Uuid
+  orgId      String        @default("rsc")
+  name       String
+  startDate  DateTime      @db.Date
+  endDate    DateTime      @db.Date
+  isCurrent  Boolean       @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  nodes      ProgramNode[]
+
+  @@unique([orgId, name])
+}
+
+model ProgramType {
+  id                String        @id @default(uuid()) @db.Uuid
+  orgId             String        @default("rsc")
+  key               String
+  label             String
+  learnerKind       LearnerKind
+  guardianRequired  Boolean
+  defaultBilling    String        @default("monthly")
+  curriculumLevels  String[]
+  defaultRecipients String        @default("both") // student | guardian | both | self
+  config            Json          @default("{}")
+  archivedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  nodes             ProgramNode[]
+
+  @@unique([orgId, key])
+}
+
+model NodeType {
+  id                String        @id @default(uuid()) @db.Uuid
+  orgId             String        @default("rsc")
+  key               String
+  label             String
+  allowedParentKeys String[] // empty = may be a root
+  enrollable        Boolean       @default(false)
+  order             Int           @default(0)
+  nodes             ProgramNode[]
+
+  @@unique([orgId, key])
+}
+
+/// Program → Course → Batch (or any configured hierarchy).
+model ProgramNode {
+  id                 String    @id @default(uuid()) @db.Uuid
+  orgId              String    @default("rsc")
+  yearId             String    @db.Uuid
+  parentId           String?   @db.Uuid
+  nodeTypeId         String    @db.Uuid
+  programTypeId      String?   @db.Uuid // set on roots; children inherit
+  name               String
+  code               String?
+  defaultDurationMin Int?
+  attributes         Json      @default("{}")
+  order              Int       @default(0)
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  year          AcademicYear      @relation(fields: [yearId], references: [id])
+  parent        ProgramNode?      @relation("NodeTree", fields: [parentId], references: [id])
+  children      ProgramNode[]     @relation("NodeTree")
+  nodeType      NodeType          @relation(fields: [nodeTypeId], references: [id])
+  programType   ProgramType?      @relation(fields: [programTypeId], references: [id])
+  batchSubjects BatchSubject[]
+  enrollments   Enrollment[]
+  slots         TimetableSlot[]
+  dateChanges   ClassDateChange[]
+  classRecords  ClassRecord[]
+
+  @@index([yearId, parentId])
+}
+
+model Subject {
+  id                 String         @id @default(uuid()) @db.Uuid
+  orgId              String         @default("rsc")
+  name               String
+  code               String
+  boardTags          String[]
+  color              String?
+  defaultDurationMin Int?
+  archivedAt         DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  batchSubjects      BatchSubject[]
+  syllabus           SyllabusNode[]
+
+  @@unique([orgId, code])
+}
+
+model BatchSubject {
+  id                 String            @id @default(uuid()) @db.Uuid
+  batchId            String            @db.Uuid
+  subjectId          String            @db.Uuid
+  defaultDurationMin Int?
+  createdAt          DateTime          @default(now())
+  batch              ProgramNode       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subject            Subject           @relation(fields: [subjectId], references: [id])
+  slots              TimetableSlot[]
+  dateChanges        ClassDateChange[]
+
+  @@unique([batchId, subjectId])
+}
+
+/// A recurring weekly class: e.g. Physics for batch Alpha, every Mon 16:00 for 90 min.
+/// Times are local wall-clock times (institute timezone), stored as minutes from midnight.
+model TimetableSlot {
+  id             String            @id @default(uuid()) @db.Uuid
+  orgId          String            @default("rsc")
+  batchSubjectId String            @db.Uuid
+  batchId        String            @db.Uuid // denormalised for fast timetable / clash queries
+  weekday        Int // 1 = Monday … 7 = Sunday
+  startMin       Int // minutes from midnight, e.g. 960 = 16:00
+  durationMin    Int
+  room           String?
+  mode           String            @default("offline") // offline | online | hybrid
+  meetingUrl     String?
+  effectiveFrom  DateTime          @db.Date
+  effectiveTo    DateTime?         @db.Date
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  batchSubject   BatchSubject      @relation(fields: [batchSubjectId], references: [id], onDelete: Cascade)
+  batch          ProgramNode       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  dateChanges    ClassDateChange[]
+
+  @@index([batchId, weekday])
+  @@index([weekday, room])
+}
+
+/// A change that applies to one date only, never to the weekly pattern:
+///  - extra:     a one-time class (slotId null) on `date`
+///  - cancelled: the weekly class `slotId` does not happen on `slotDate`
+///  - moved:     the weekly class `slotId` on `slotDate` happens on `date` at another time / room instead
+model ClassDateChange {
+  id             String            @id @default(uuid()) @db.Uuid
+  orgId          String            @default("rsc")
+  kind           String // extra | cancelled | moved
+  batchSubjectId String            @db.Uuid
+  batchId        String            @db.Uuid
+  slotId         String?           @db.Uuid
+  slotDate       DateTime?         @db.Date
+  date           DateTime?         @db.Date // when the class actually happens (null when cancelled)
+  startMin       Int?
+  durationMin    Int?
+  room           String?
+  mode           String?
+  meetingUrl     String?
+  notes          String?
+  /// cancelled only: why ("teacher" | "holiday" | "other"); a teacher cancellation usually needs a make-up
+  reason         String?
+  /// cancelled only: a make-up class is owed until an extra class points at this one
+  makeupRequired Boolean           @default(false)
+  /// extra only: the cancelled class this one makes up for
+  makeupForId    String?           @db.Uuid
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  batchSubject   BatchSubject      @relation(fields: [batchSubjectId], references: [id], onDelete: Cascade)
+  batch          ProgramNode       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  slot           TimetableSlot?    @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  makeupFor      ClassDateChange?  @relation("Makeup", fields: [makeupForId], references: [id], onDelete: SetNull)
+  makeups        ClassDateChange[] @relation("Makeup")
+
+  @@unique([slotId, slotDate])
+  @@index([date])
+  @@index([slotDate])
+  @@index([makeupForId])
+}
+
+model SyllabusNode {
+  id        String         @id @default(uuid()) @db.Uuid
+  subjectId String         @db.Uuid
+  parentId  String?        @db.Uuid
+  level     String // unit | chapter | topic | module | session
+  name      String
+  weightage Float?
+  estHours  Float?
+  order     Int            @default(0)
+  subject   Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  parent    SyllabusNode?  @relation("SyllabusTree", fields: [parentId], references: [id])
+  children  SyllabusNode[] @relation("SyllabusTree")
+
+  @@index([subjectId, parentId])
+}
+
+model StudentGroup {
+  id        String        @id @default(uuid()) @db.Uuid
+  orgId     String        @default("rsc")
+  name      String
+  kind      String        @default("manual") // manual | rule
+  rule      Json?
+  color     String?
+  createdAt DateTime      @default(now())
+  members   GroupMember[]
+
+  @@unique([orgId, name])
+}
+
+model GroupMember {
+  groupId   String       @db.Uuid
+  studentId String       @db.Uuid
+  addedBy   String       @default("user")
+  addedAt   DateTime     @default(now())
+  group     StudentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, studentId])
+}
+
+// ─────────────────────────────── Students ───────────────────────────────
+
+enum StudentStatus {
+  ACTIVE
+  ON_HOLD
+  ALUMNI
+  DROPPED
+}
+
+model Student {
+  id          String        @id @default(uuid()) @db.Uuid
+  orgId       String        @default("rsc")
+  admissionNo String
+  firstName   String
+  lastName    String        @default("")
+  dobEnc      String? // encrypted ISO date
+  gender      String?
+  learnerKind LearnerKind   @default(MINOR)
+  status      StudentStatus @default(ACTIVE)
+  custom      Json          @default("{}")
+  archivedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  contacts    GuardianLink[]
+  enrollments Enrollment[]
+  groups      GroupMember[]
+  attendance  Attendance[]
+
+  @@unique([orgId, admissionNo])
+  @@index([firstName, lastName])
+  @@index([status])
+}
+
+/// Every phone/email recipient. PII is encrypted; *Idx columns are HMAC blind
+/// indexes so we can look up "which contact sent this WhatsApp?" without decrypting.
+model Contact {
+  id                String            @id @default(uuid()) @db.Uuid
+  orgId             String            @default("rsc")
+  name              String
+  phoneEnc          String?
+  phoneIdx          String?
+  phoneLast4        String?
+  whatsappEnc       String?
+  whatsappIdx       String?
+  emailEnc          String?
+  emailIdx          String?
+  emailOptIn        Boolean           @default(false)
+  waOptIn           Boolean           @default(false)
+  consentAt         DateTime?
+  consentSource     String?
+  preferredChannel  String            @default("whatsapp")
+  preferredLanguage String            @default("en")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  links             GuardianLink[]
+  messages          OutboundMessage[]
+  demoClasses       DemoClass[]
+
+  @@index([phoneIdx])
+  @@index([whatsappIdx])
+  @@index([emailIdx])
+}
+
+model GuardianLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  studentId String   @db.Uuid
+  contactId String   @db.Uuid
+  relation  String // self | father | mother | guardian | other
+  isPrimary Boolean  @default(false)
+  receives  String   @default("all") // all | academic | fees
+  createdAt DateTime @default(now())
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, contactId])
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  LEFT
+  TRANSFERRED
+}
+
+model Enrollment {
+  id        String           @id @default(uuid()) @db.Uuid
+  studentId String           @db.Uuid
+  batchId   String           @db.Uuid
+  rollNo    String?
+  joinedOn  DateTime         @db.Date
+  leftOn    DateTime?        @db.Date
+  status    EnrollmentStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batch     ProgramNode      @relation(fields: [batchId], references: [id])
+
+  @@index([batchId, status])
+  @@index([studentId])
+}
+
+/// Every outgoing email / WhatsApp message. The address is not stored; it's decrypted from
+/// the contact at send time and only a masked hint is kept for the log.
+model OutboundMessage {
+  id           String             @id @default(uuid()) @db.Uuid
+  orgId        String             @default("rsc")
+  channel      String // email | whatsapp
+  contactId    String?            @db.Uuid
+  contact      Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  toName       String
+  toHint       String // masked, e.g. "••••••4321" or "r•••@gmail.com"
+  subject      String?
+  body         String
+  /// WhatsApp template values ({{1}} name, {{2}} students + batch, {{3}} the change)
+  params       Json?
+  /// Message id from the mail server / WhatsApp, for tracing delivery
+  providerRef  String?
+  reason       String // e.g. timetable.changed, homework, notice
+  batchId      String?            @db.Uuid
+  /// WhatsApp template to use; null = the default (WHATSAPP_TEMPLATE)
+  templateName String?
+  /// Bulk send this message belongs to
+  campaignId   String?            @db.Uuid
+  campaign     Campaign?          @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  /// Image / document sent with it (WhatsApp header, or email attachment)
+  attachmentId String?            @db.Uuid
+  attachment   MessageAttachment? @relation(fields: [attachmentId], references: [id], onDelete: SetNull)
+  /// Scheduled send: not delivered before this time
+  notBefore    DateTime?
+  /// Too late after this (e.g. a class reminder once the class has started): skipped instead of sent
+  expiresAt    DateTime?
+  /// Stops automatic messages being queued twice, e.g. "reminder:<class>:<date>:<contact>"
+  dedupeKey    String?            @unique
+  status       String             @default("queued") // queued | sending | sent | simulated | failed | manual | skipped
+  attempts     Int                @default(0)
+  lastError    String?
+  createdById  String?            @db.Uuid
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  sentAt       DateTime?
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@index([campaignId])
+}
+
+/// One bulk send (homework, notice …) to students and/or parents.
+model Campaign {
+  id           String             @id @default(uuid()) @db.Uuid
+  orgId        String             @default("rsc")
+  purpose      String // homework | notice
+  /// Short summary for the Sent list, e.g. "Homework · Class 10 · Maths"
+  title        String
+  /// What was picked: { batchIds, groupIds, studentIds, who }
+  audience     Json
+  /// Contacts left out and why (no consent, no number …)
+  skipped      Json               @default("[]")
+  scheduledAt  DateTime?
+  createdById  String?            @db.Uuid
+  createdAt    DateTime           @default(now())
+  messages     OutboundMessage[]
+  attachmentId String?            @db.Uuid
+  attachment   MessageAttachment? @relation(fields: [attachmentId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+/// A file sent with a broadcast. Stored encrypted (AES-256-GCM, bound to its id); never on disk.
+model MessageAttachment {
+  id          String            @id @db.Uuid
+  orgId       String            @default("rsc")
+  fileName    String
+  mimeType    String
+  /// image | document (decides the WhatsApp template header)
+  kind        String
+  size        Int
+  dataEnc     Bytes
+  /// WhatsApp media id after upload (valid ~30 days), so a broadcast uploads the file once
+  waMediaId   String?
+  waMediaAt   DateTime?
+  createdById String?           @db.Uuid
+  createdAt   DateTime          @default(now())
+  messages    OutboundMessage[]
+  campaigns   Campaign[]
+}
+
+/// What happened in one class on one date: notes, homework and attendance.
+/// classKey = "<slotId>:<usual date>" for a weekly class (stays the same if that date is moved),
+/// or the ClassDateChange id for a one-time class.
+model ClassRecord {
+  id                String       @id @default(uuid()) @db.Uuid
+  orgId             String       @default("rsc")
+  classKey          String       @unique
+  batchId           String       @db.Uuid
+  batch             ProgramNode  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchSubjectId    String       @db.Uuid
+  /// The date the class was actually held
+  date              DateTime     @db.Date
+  startMin          Int
+  /// Covered in class
+  notes             String?
+  homework          String?
+  homeworkDue       DateTime?    @db.Date
+  /// Last time notes / homework were sent to students
+  sentAt            DateTime?
+  attendanceTakenAt DateTime?
+  createdById       String?      @db.Uuid
+  updatedById       String?      @db.Uuid
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  attendance        Attendance[]
+
+  @@index([batchId, date])
+  @@index([date])
+}
+
+model Attendance {
+  id            String      @id @default(uuid()) @db.Uuid
+  classRecordId String      @db.Uuid
+  classRecord   ClassRecord @relation(fields: [classRecordId], references: [id], onDelete: Cascade)
+  studentId     String      @db.Uuid
+  student       Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status        String // present | absent | late
+  note          String?
+  markedById    String?     @db.Uuid
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([classRecordId, studentId])
+  @@index([studentId])
+}
+
+/// A trial class for someone who isn't a student yet: free-text subject, one person to message
+model DemoClass {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @default("rsc")
+  subject     String
+  date        DateTime  @db.Date
+  startMin    Int
+  durationMin Int
+  room        String?
+  mode        String    @default("offline")
+  meetingUrl  String?
+  notes       String?
+  /// Who attends (and gets the WhatsApp messages); a Contact not linked to any student
+  personName  String
+  contactId   String?   @db.Uuid
+  contact     Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  /// Send a WhatsApp reminder before the class (independent of the students' reminder switch)
+  remind      Boolean   @default(true)
+  cancelledAt DateTime?
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([date])
+}

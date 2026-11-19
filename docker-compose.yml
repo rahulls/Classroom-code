@@ -1,0 +1,42 @@
+# Local services for RSC Classroom. All ports bind to 127.0.0.1 only and use
+# non-standard host ports (see design/02-architecture.md §5). Values come from .env.
+name: rsc-classroom
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:?run npm run setup}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?run npm run setup}
+      POSTGRES_DB: ${DB_NAME:?run npm run setup}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "127.0.0.1:${DB_PORT:-54329}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?run npm run setup}", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-63790}:6379"
+    volumes:
+      - redisdata:/data
+
+  mailpit:
+    image: axllent/mailpit:v1.20
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SMTP_PORT:-10250}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-10251}:8025"
+
+volumes:
+  pgdata:
+  redisdata:

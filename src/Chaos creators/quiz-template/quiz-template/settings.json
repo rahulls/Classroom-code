@@ -1,0 +1,25 @@
+{
+  "channel_name": "Chaos Creators",
+  "logo": "assets/logo.png",
+  "logo_small": "assets/logo_small.png",
+
+  "quiz_badge": "GK QUIZ",
+  "intro_badge": "TODAY'S QUIZ",
+  "title_lines": ["General", "Knowledge"],
+  "intro_lines": ["{n} questions  •  {seconds} seconds each", "How many can you get right?"],
+  "intro_voice": "Welcome to {channel}! Today's {topic} has {n} questions, and you get {seconds} seconds for each one. Let's go!",
+
+  "outro_title": ["What's your", "score?"],
+  "outro_lines": ["Comment your score below!", "Subscribe for more quizzes"],
+  "outro_voice": "That's the end of the quiz! How many did you get right? Comment your score below, and subscribe to {channel} for more quizzes!",
+
+  "question_voice": "Question {q}.",
+
+  "timer_seconds": 5,
+  "options_delay": 2,
+  "answer_hold": 3,
+  "timer_text": "Think fast!",
+
+  "voice": "af_heart",
+  "voice_lang": "en-us"
+}

@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RSC Classroom Wireframes</title>
+<style>
+  :root{--bg:#f5f5f4;--panel:#fff;--ink:#1c1917;--muted:#78716c;--line:#d6d3d1;--soft:#e7e5e4;--accent:#3b5bdb;--ok:#2f9e44;--warn:#e67700;--bad:#c92a2a;}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1c1917;--panel:#262321;--ink:#f5f5f4;--muted:#a8a29e;--line:#44403c;--soft:#33302d;--accent:#748ffc;}}
+  :root[data-theme="dark"]{--bg:#1c1917;--panel:#262321;--ink:#f5f5f4;--muted:#a8a29e;--line:#44403c;--soft:#33302d;--accent:#748ffc;}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;gap:12px;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+  header b{font-size:15px} .search{flex:1;max-width:420px;border:1px dashed var(--line);border-radius:6px;padding:6px 10px;color:var(--muted)}
+  .pill{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .layout{display:flex;min-height:calc(100vh - 50px)}
+  nav{width:200px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);padding:10px 8px}
+  nav a{display:block;padding:7px 10px;border-radius:6px;color:var(--ink);text-decoration:none;cursor:pointer}
+  nav a:hover{background:var(--soft)} nav a.on{background:var(--accent);color:#fff}
+  main{flex:1;padding:20px;min-width:0}
+  section{display:none} section.on{display:block}
+  h1{font-size:18px;margin:0 0 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center} h1 .sp{flex:1}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+  .btn{display:inline-block;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer;color:var(--ink)}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+  .grid{display:grid;gap:14px} .g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))} .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .kpi b{display:block;font-size:24px} .kpi span{color:var(--muted);font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px} th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--soft)} th{color:var(--muted);font-weight:600;font-size:12px}
+  .tw{overflow-x:auto}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .mut{color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .ph{background:repeating-linear-gradient(45deg,var(--soft),var(--soft) 6px,transparent 6px,transparent 12px);border:1px dashed var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--muted);min-height:120px}
+  .bar{height:8px;background:var(--soft);border-radius:4px;overflow:hidden} .bar i{display:block;height:100%;background:var(--accent)}
+  .st{display:inline-flex;gap:4px} .st span{width:26px;height:26px;border:1px solid var(--line);border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer}
+  .st span.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .tree div{padding:3px 0} .tree .l1{padding-left:16px} .tree .l2{padding-left:32px} .tree .sel{color:var(--accent);font-weight:600}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:12px;flex-wrap:wrap} .tabs span{padding:6px 10px;color:var(--muted)} .tabs span.on{color:var(--ink);border-bottom:2px solid var(--accent)}
+  .cal{display:grid;grid-template-columns:60px repeat(7,minmax(80px,1fr));font-size:12px;min-width:680px} .cal div{border:1px solid var(--soft);padding:6px;min-height:40px} .cal .h{font-weight:600;background:var(--soft)}
+  .ev{border-radius:4px;padding:2px 4px;margin-bottom:2px;background:var(--soft)} .ev.t{border-left:3px solid var(--bad)} .ev.l{border-left:3px solid var(--accent)} .ev.e{border-left:3px solid var(--ok)}
+  .wk{display:grid;grid-template-columns:52px repeat(7,minmax(110px,1fr));min-width:860px;font-size:11px}
+  .wk .dh{font-weight:600;font-size:12px;padding:6px;border-bottom:1px solid var(--line);background:var(--soft)}
+  .wk .ad{padding:4px;border-bottom:1px solid var(--line);min-height:26px}
+  .wk .tc,.wk .dc{position:relative;border-left:1px solid var(--soft)}
+  .wk .tc span{position:absolute;right:6px;transform:translateY(-50%);color:var(--muted)}
+  .wk .dc{background:repeating-linear-gradient(to bottom,transparent 0,transparent 29px,var(--soft) 29px,var(--soft) 30px)}
+  .blk{position:absolute;left:3px;right:3px;border-radius:5px;padding:3px 5px;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);cursor:pointer;line-height:1.25}
+  .blk b{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .blk i{font-style:normal;color:var(--muted)}
+  .blk .du{position:absolute;top:3px;right:4px;font-size:10px;border-radius:3px;padding:0 3px;background:var(--soft)}
+  .k-l{border-left-color:#3b5bdb}.k-t{border-left-color:#c92a2a}.k-d{border-left-color:#7048e8}.k-b{border-left-color:#0c8599}.k-e{border-left-color:#2f9e44}.k-x{border-left-color:#e67700;border-style:dashed solid dashed solid}
+  .wk.bydur .blk{border-left-color:var(--line)} .wk.bydur .d60{background:#e7f5ff}.wk.bydur .d90{background:#a5d8ff}.wk.bydur .d120{background:#4dabf7;color:#0b1d33}
+  .wk.bydur .d120 i{color:#0b1d33}
+  .bubble{background:var(--soft);border-radius:10px;padding:10px;font-size:13px}
+  .step{display:flex;gap:10px;margin-bottom:12px} .step b{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+  .note{font-size:12px;color:var(--muted);border-left:3px solid var(--accent);padding-left:8px;margin-top:8px}
+  @media (max-width:760px){nav{position:fixed;bottom:0;left:0;right:0;width:auto;display:flex;overflow-x:auto;border-right:0;border-top:1px solid var(--line);padding:6px;z-index:3} nav a{white-space:nowrap} main{padding:16px 16px 80px} .search{display:none}}
+</style>
+</head>
+<body>
+<header><b>RSC Classroom</b><span class="pill">2026-27 ▾</span><div class="search">🔍 Search students, batches, tests… ⌘K</div><span class="sp" style="flex:1"></span><span class="pill">🔔 3</span><span class="pill">RS</span></header>
+<div class="layout">
+<nav id="nav"></nav>
+<main>
+
+<section id="today">
+  <h1>Today · Mon 2 Nov<span class="sp"></span><span class="btn p">+ Announcement</span><span class="btn">+ Assignment</span><span class="btn">+ Test</span></h1>
+  <div class="grid g4">
+    <div class="card kpi"><b>5</b><span>sessions today</span></div>
+    <div class="card kpi"><b class="warn">2</b><span>registers unmarked</span></div>
+    <div class="card kpi"><b>38</b><span>submissions to check</span></div>
+    <div class="card kpi"><b class="bad">4</b><span>messages failed · retry</span></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h2>Schedule</h2><table>
+      <tr><td>07:00</td><td>JEE Alpha · Physics · Rotational</td><td class="ok">✓ marked</td></tr>
+      <tr><td>16:00</td><td>Class 10 CBSE · Maths</td><td><a class="btn" data-go="attendance">Mark ▸</a></td></tr>
+      <tr><td>17:30</td><td>Class 12 PCM · Chemistry</td><td><a class="btn" data-go="attendance">Mark ▸</a></td></tr>
+      <tr><td>19:00</td><td>INMO Sr · Doubt session (online)</td><td class="mut">link sent</td></tr>
+      <tr><td>20:30</td><td>Dropper Target · Mock review</td><td></td></tr></table></div>
+    <div class="card"><h2>Needs attention</h2>
+      <p class="warn">⚠ 6 students below 75% attendance (Oct)</p>
+      <p class="warn">⚠ 12 missing DPP-14 (JEE Beta) · <a class="btn">Remind</a></p>
+      <p class="warn">⚠ Mock Test 3 results not published · <a class="btn" data-go="assess">Open</a></p>
+      <p>🎂 Birthdays: Aarav (10A), Diya (JEE Alpha)</p>
+      <p>📞 3 enquiry follow-ups due · <a class="btn" data-go="enquiries">Open</a></p>
+      <p>📝 1 class not logged (JEE Alpha Phy 07:00) · <a class="btn" data-go="notes">Log</a></p>
+      <p class="ok">☁ Backup ✔ today 02:00 (18.4 MB)</p>
+      <h2 style="margin-top:14px">Upcoming</h2>
+      <p class="mut">Wed · Chapter Test: Electrostatics<br>Sat · PTM, Class 10<br>15 Nov · NSEP registration closes</p></div>
+  </div>
+</section>
+
+<section id="academics">
+  <h1>Academics<span class="sp"></span><span class="btn">Clone year ▸</span><span class="btn p">+ Program</span></h1>
+  <div class="grid g2" style="grid-template-columns:minmax(220px,280px) 1fr">
+    <div class="card tree"><h2>Structure</h2>
+      <div>▾ School Boards</div><div class="l1">▸ Class 8</div><div class="l1">▸ Class 9</div><div class="l1">▾ Class 10</div><div class="l2">• 10 CBSE Morning</div><div class="l2">• 10 ICSE Evening</div><div class="l1">▸ Class 11</div><div class="l1">▸ Class 12</div>
+      <div>▾ JEE</div><div class="l1">▾ JEE 2-Year (2028)</div><div class="l2 sel">• Alpha</div><div class="l2">• Beta</div><div class="l1">▸ JEE Dropper (2027)</div>
+      <div>▾ Olympiad</div><div class="l1">▸ NSEP / INPhO</div><div class="l1">▸ IMO / INMO</div>
+      <div class="mut" style="margin-top:8px">+ add node (types configurable)</div></div>
+    <div class="card"><h2>JEE 2-Year (2028) › Alpha</h2>
+      <div class="row"><span class="pill">42 / 50 students</span><span class="pill">Hybrid</span><span class="pill">Room R-2</span><span class="pill">Mentors: Rahul, Neha, Arjun</span></div>
+      <div class="tw"><table><tr><th>Subject</th><th>Syllabus done</th><th></th><th>Next session</th></tr>
+        <tr><td>Physics</td><td style="width:40%"><div class="bar"><i style="width:78%"></i></div></td><td>78%</td><td>Tue 07:00</td></tr>
+        <tr><td>Chemistry</td><td><div class="bar"><i style="width:52%"></i></div></td><td>52%</td><td>Wed 07:00</td></tr>
+        <tr><td>Maths</td><td><div class="bar"><i style="width:61%"></i></div></td><td>61%</td><td>Thu 07:00</td></tr></table></div>
+      <div class="row" style="margin-top:12px"><span class="btn">Timetable</span><span class="btn" data-go="students">Students</span><span class="btn">Groups</span><span class="btn">Batch settings</span></div></div>
+  </div>
+</section>
+
+<section id="students">
+  <h1>Students (312)<span class="sp"></span><span class="btn">Import CSV</span><span class="btn p">+ Add student</span></h1>
+  <div class="card">
+    <div class="row"><span class="pill">🔍 search…</span><span class="pill">Batch: All ▾</span><span class="pill">Group: All ▾</span><span class="pill">Status: Active ▾</span><span class="pill">+ Filter (any custom field)</span><span class="pill">★ Saved views ▾</span></div>
+    <div class="tw"><table><tr><th>☐</th><th>Name</th><th>Batches</th><th>Att %</th><th>Avg %</th><th>Pending</th><th>Contacts</th></tr>
+      <tr><td>☐</td><td>Aarav Mehta</td><td>10 CBSE M</td><td class="ok">92 ▲</td><td>81</td><td>0</td><td>📱✉ Father ✔WA</td></tr>
+      <tr><td>☐</td><td><a data-go="profile" style="color:var(--accent);cursor:pointer">Diya Patel</a></td><td>JEE Alpha +2</td><td class="warn">71 ⚠</td><td>64 ▼</td><td>3</td><td>📱✉ Mother ✔WA</td></tr>
+      <tr><td>☐</td><td>Kabir Singh</td><td>12 PCM</td><td>88</td><td>58</td><td>1</td><td>📱 <span class="warn">✉ missing</span></td></tr>
+      <tr><td>☐</td><td>Meera Joshi</td><td>JEE Beta · INPhO</td><td>95</td><td>89</td><td>0</td><td>📱✉ Both ✔WA</td></tr></table></div>
+    <div class="row" style="margin-top:10px"><span class="mut">With selected →</span><span class="btn" data-go="compose">Message</span><span class="btn">Add to group</span><span class="btn">Move batch</span><span class="btn">Export</span></div>
+  </div>
+</section>
+
+<section id="profile">
+  <h1>◀ Diya Patel <span class="pill">RSC-2026-0142</span><span class="pill">Active</span><span class="sp"></span><span class="btn" data-go="compose">Message ▾</span><span class="btn">Edit</span></h1>
+  <div class="card"><div class="row"><div class="ph" style="width:64px;min-height:64px">photo</div><div>JEE Alpha · Olympiad Physics Core · Group: INPhO shortlist<br><span class="mut">Mentor: Neha Sharma · Guardian: Mrs. Patel (Mother, WhatsApp ✔, Email ✔)</span></div></div>
+    <div class="grid g4"><div class="kpi"><b class="warn">71%</b><span>attendance</span></div><div class="kpi"><b>64%</b><span>avg score</span></div><div class="kpi"><b>18</b><span>rank (Mock 3)</span></div><div class="kpi"><b>3</b><span>pending work</span></div></div></div>
+  <div class="tabs"><span class="on">Overview</span><span>Profile</span><span>Attendance</span><span>Scores</span><span>Assignments</span><span>Messages</span><span>Mentor notes</span></div>
+  <div class="grid g2">
+    <div class="card"><h2>Score trend vs batch average</h2><div class="ph">line chart</div></div>
+    <div class="card"><h2>Weak topics</h2><p>Rotational dynamics · <span class="bad">38%</span></p><p>Electrochemistry · <span class="bad">42%</span></p><p>Definite integrals · <span class="warn">45%</span></p></div>
+  </div>
+  <div class="card"><h2>Recent activity</h2><table>
+    <tr><td class="mut">30 Oct</td><td>Absent: Chemistry → WhatsApp to Mother</td><td class="ok">✓✓ read</td></tr>
+    <tr><td class="mut">28 Oct</td><td>Mock 3: 168/300 (Rank 18) → result sent</td><td class="ok">✓✓ delivered</td></tr>
+    <tr><td class="mut">25 Oct</td><td>Mentor note: "Needs extra practice in rotation…"</td><td></td></tr></table></div>
+</section>
+
+<section id="attendance">
+  <h1>Attendance · Class 10 CBSE · Maths · Mon 2 Nov 16:00</h1>
+  <div class="card">
+    <div class="row"><span class="pill">Default: all present</span><span class="pill">Keys: ↑↓ then P / A / L / E / O</span><span class="pill">Statuses configurable in Settings</span></div>
+    <div class="tw"><table id="reg"><tr><th>#</th><th>Student</th><th>Status</th><th>Remark</th></tr></table></div>
+    <p id="sum" class="mut"></p>
+    <div class="row"><span class="btn">Save draft</span><span class="btn p">Save &amp; notify ▸</span></div>
+    <p class="note">Parents of Absent/Late students get the <i>absent_today</i> WhatsApp after a 15-minute grace window, which is cancelled if you correct the mark.</p>
+  </div>
+</section>
+
+<section id="calendar">
+  <h1>Calendar<span class="sp"></span><span class="pill">Month</span><span class="pill" style="border-color:var(--accent)">Week</span><span class="pill">Day</span><span class="pill">Agenda</span><span class="pill">View: Batch ▾ / Student / Mentor / Room</span><span class="btn">+ Event</span><span class="btn p" data-go="extra">+ Extra class</span></h1>
+  <div class="card tw"><div class="row"><span class="mut">Colour by:</span><span class="btn p" id="cbType">Type</span><span class="btn" id="cbDur">Duration</span><span class="sp" style="flex:1"></span><span id="legend" class="mut"></span></div>
+    <div id="wk" class="wk"></div>
+    <p class="note">Each block is drawn at its real length (60 / 90 / 120 / 180 min). Durations come from Settings, then course, then subject, then slot, then the single class. Click a session to mark attendance, cancel or reschedule. A "Notify students" toggle sends class_cancelled / rescheduled.</p></div>
+</section>
+
+<section id="assess">
+  <h1>Mock Test 3 · JEE Alpha <span class="pill">Scoring: JEE Main (+4/−1)</span><span class="pill">Max 300</span></h1>
+  <div class="tabs"><span>Answer key</span><span>Responses</span><span class="on">Marks</span><span>Analysis</span><span>Publish</span></div>
+  <div class="card">
+    <div class="row"><span class="mut">Entry mode:</span><span class="pill">Total only</span><span class="pill">Subject-wise</span><span class="pill" style="border-color:var(--accent)">● Per-question (auto-score)</span></div>
+    <div class="tw"><table><tr><th>Student</th><th>Phy</th><th>Chem</th><th>Math</th><th>Total</th><th>Rank</th><th>%ile</th><th>Status</th></tr>
+      <tr><td>Arjun K</td><td>84</td><td>76</td><td>92</td><td><b>252</b></td><td>1</td><td>99.0</td><td class="ok">checked</td></tr>
+      <tr><td>Diya Patel</td><td>52</td><td>60</td><td>56</td><td><b>168</b></td><td>18</td><td>58.3</td><td class="ok">checked</td></tr>
+      <tr><td>Kabir S</td><td>—</td><td>—</td><td>—</td><td>—</td><td></td><td></td><td class="mut">absent</td></tr></table></div>
+    <p class="mut">Batch avg 171 · Highest 252 · Lowest 64</p></div>
+  <div class="card"><h2>Publish results</h2>
+    <div class="row"><span class="pill">Template: result_published</span><span class="pill">To: ● Both</span><span class="pill">✔ WhatsApp ✔ Email</span><span class="pill">✔ Attach individual score PDF</span></div>
+    <div class="row"><span class="btn">Preview</span><span class="btn p">Publish &amp; send to 42 + 48 ▸</span></div></div>
+  <div class="card"><h2>Assignment tracker · DPP-14 · due 1 Nov 23:59</h2>
+    <div class="row"><span class="pill ok">34 submitted</span><span class="pill warn">4 late</span><span class="pill bad">12 missing</span><span class="pill">22 checked</span><span class="pill">Inbox: 5 new from WhatsApp</span><span class="btn">Remind missing ▸</span></div>
+    <div class="tw"><table><tr><th>Student</th><th>Status</th><th>Source</th><th>Marks</th><th></th></tr>
+      <tr><td>Meera J</td><td class="ok">✔ checked</td><td>WhatsApp</td><td>18/20 · A</td><td><span class="btn">View</span></td></tr>
+      <tr><td>Rohit V</td><td class="warn">⏰ late</td><td>Manual</td><td></td><td><span class="btn">Check ▸</span></td></tr>
+      <tr><td>Sana Q</td><td class="bad">✖ missing</td><td>—</td><td></td><td><span class="btn">Mark submitted</span></td></tr></table></div></div>
+</section>
+
+<section id="compose">
+  <h1>New announcement</h1>
+  <div class="grid g2">
+    <div class="card">
+      <div class="step"><b>1</b><div><h2>Audience</h2><span class="pill">JEE Alpha ×</span> <span class="pill">JEE Beta ×</span> <span class="pill">+ batch / group / student</span><div class="mut">→ 84 students</div></div></div>
+      <div class="step"><b>2</b><div><h2>Send to</h2>○ Students ○ Guardians <b>● Both</b><div class="mut">→ 84 + 96 contacts</div></div></div>
+      <div class="step"><b>3</b><div><h2>Channels</h2>✔ WhatsApp (162 opted-in) · ✔ Email (171) · fallback WA→Email</div></div>
+      <div class="step"><b>4</b><div style="flex:1"><h2>Template</h2><span class="pill">test_scheduled ▾</span> <span class="ok">● WA approved</span>
+        <div class="bubble" style="margin-top:8px;font-family:ui-monospace,monospace;font-size:12px">Dear {{recipient.name}},<br>{{student.first_name}}'s Mock Test 4 is on {{test.date}} at {{test.time}}.<br>Syllabus: {{test.syllabus}}</div>
+        <div class="row" style="margin-top:6px"><span class="btn">+ variable</span><span class="btn">📎 attach</span></div></div></div>
+      <div class="step"><b>5</b><div><h2>When</h2>● Now ○ Schedule · ✔ respect quiet hours · <span class="mut">Est. cost ₹21</span></div></div>
+      <p class="warn">⚠ 6 contacts have no WhatsApp opt-in → email only · ⚠ 2 invalid emails</p>
+      <div class="row"><span class="btn">Save draft</span><span class="btn p" data-go="delivery">Send to 180 ▸</span></div>
+    </div>
+    <div class="card"><h2>Preview ◀ Diya Patel (Mother) ▶</h2>
+      <div class="bubble" style="max-width:320px">Dear Mrs. Patel,<br>Diya's Mock Test 4 is on <b>Sun 8 Nov</b> at <b>9:00 AM</b>.<br>Syllabus: Rotation, Electrostatics, Integration.<br><br><span class="mut">— Rahul Shah Classes</span></div>
+      <p class="note">Flip through recipients to check how variables render. The email variant shows the branded HTML layout.</p></div>
+  </div>
+</section>
+
+<section id="delivery">
+  <h1>Mock Test 4 announcement · sent 2 Nov 18:04<span class="sp"></span><span class="btn">Retry failed</span></h1>
+  <div class="grid g4"><div class="card kpi"><b>180</b><span>sent</span></div><div class="card kpi"><b class="ok">174</b><span>delivered</span></div><div class="card kpi"><b>131</b><span>read</span></div><div class="card kpi"><b class="bad">6</b><span>failed</span></div></div>
+  <div class="card tw"><table><tr><th>Recipient</th><th>Student</th><th>Channel</th><th>Status</th><th>Time</th></tr>
+    <tr><td>Mrs. Patel</td><td>Diya</td><td>WhatsApp</td><td class="ok">✓✓ read</td><td>18:06</td></tr>
+    <tr><td>Kabir Singh</td><td>Kabir</td><td>Email</td><td class="bad">✖ bounced · <span class="btn">Fix contact</span></td><td>18:04</td></tr></table></div>
+</section>
+
+<section id="auto">
+  <h1>Automations<span class="sp"></span><span class="btn p">+ New rule</span></h1>
+  <div class="card tw"><table><tr><th></th><th>Rule</th><th>Event</th><th>This month</th></tr>
+    <tr><td class="ok">● ON</td><td>Absent → parent WhatsApp</td><td>attendance.marked</td><td>312 sent</td></tr>
+    <tr><td class="ok">● ON</td><td>Assignment due in 24h → student</td><td>assessment.due_soon</td><td>88 sent</td></tr>
+    <tr><td class="ok">● ON</td><td>Result published → both + PDF</td><td>result.published</td><td>420 sent</td></tr>
+    <tr><td class="mut">○ OFF</td><td>Birthday wish 8 AM</td><td>student.birthday</td><td>—</td></tr></table></div>
+  <div class="card"><h2>Edit rule</h2>
+    <div class="row"><b style="width:56px">WHEN</b><span class="pill">attendance.marked ▾</span></div>
+    <div class="row"><b style="width:56px">IF</b><span class="pill">status ▾</span><span class="pill">is ▾</span><span class="pill">Absent ▾</span><span class="mut">AND</span><span class="pill">activity ▾</span><span class="pill">in ▾</span><span class="pill">Lecture, Test</span></div>
+    <div class="row"><b style="width:56px">THEN</b>send <span class="pill">absent_today ▾</span> to <span class="pill">Guardian ▾</span> via <span class="pill">WhatsApp ▾</span> fallback <span class="pill">Email</span></div>
+    <div class="row"><b style="width:56px">DELAY</b><span class="pill">15 min</span> DEDUPE <span class="pill">once per student per day ▾</span></div>
+    <div class="row"><span class="btn">Test with a student</span><span class="btn p">Save</span></div></div>
+</section>
+
+<section id="mentors">
+  <h1>Mentors<span class="sp"></span><span class="btn p">+ Invite mentor</span></h1>
+  <div class="card"><b>Neha Sharma</b> · Chemistry <span class="pill">Subject Mentor</span> <span class="pill">Personal Mentor</span>
+    <p class="mut">Classrooms: JEE Alpha–Chem, JEE Beta–Chem, 12 PCM–Chem<br>Mentees (8): Diya P, Rohit V, … <span class="btn">Manage mentees</span></p></div>
+  <div class="card tw"><h2>Role: Subject Mentor (editable)</h2><table><tr><th>Permission</th><th>Allowed</th><th>Scope</th></tr>
+    <tr><td>View students</td><td class="ok">✔</td><td>Assigned classrooms</td></tr>
+    <tr><td>View phone / email</td><td class="bad">✖</td><td>—</td></tr>
+    <tr><td>Mark attendance</td><td class="ok">✔</td><td>Assigned classrooms</td></tr>
+    <tr><td>Edit past attendance (&gt; 24h)</td><td class="bad">✖</td><td>—</td></tr>
+    <tr><td>Enter marks / publish results</td><td>✔ / ✖</td><td>Assigned classrooms</td></tr>
+    <tr><td>Send batch messages</td><td class="warn">✔ needs Owner approval</td><td>Assigned batches</td></tr>
+    <tr><td>Mentee notes</td><td class="ok">✔</td><td>Own mentees</td></tr></table></div>
+</section>
+
+<section id="settings">
+  <h1>Settings › Student Profile<span class="sp"></span><span class="btn p">+ Add field</span></h1>
+  <div class="grid g2" style="grid-template-columns:minmax(200px,240px) 1fr">
+    <div class="card"><h2>Settings</h2><div class="mut" style="line-height:2">Institute<br>Academic Structure<br><b style="color:var(--ink)">Student Profile</b><br>Classrooms &amp; Activities<br>Groups<br>Grading &amp; Scoring<br>Attendance<br>Calendar<br>Mentors &amp; Access<br>Communication<br>Automations<br>Modules</div></div>
+    <div class="card">
+      <div class="tabs"><span class="on">Personal</span><span>Academic</span><span>Competitive</span><span>Medical</span><span>+</span></div>
+      <div class="tw"><table><tr><th></th><th>Field</th><th>Type</th><th>Rules</th><th>Group</th><th></th></tr>
+        <tr><td>⠿</td><td>School name</td><td>Text</td><td>required</td><td>Academic</td><td>✎ 🗑</td></tr>
+        <tr><td>⠿</td><td>Board</td><td>Dropdown</td><td>CBSE, ICSE, State, IB</td><td>Academic</td><td>✎ 🗑</td></tr>
+        <tr><td>⠿</td><td>Target exam</td><td>Multi-select</td><td>—</td><td>Competitive</td><td>✎ 🗑</td></tr>
+        <tr><td>⠿</td><td>JEE App No.</td><td>Text</td><td>show if Target exam ∋ JEE Main</td><td>Competitive</td><td>✎ 🗑</td></tr>
+        <tr><td>⠿</td><td>Blood group</td><td>Dropdown</td><td>owner-only</td><td>Medical</td><td>✎ 🗑</td></tr></table></div>
+      <p class="note">The same builder edits mentor profile fields, batch attributes, attendance statuses, activity types and grading bands.</p></div>
+  </div>
+</section>
+
+<section id="timetable">
+  <h1>Timetable · Class 10 CBSE Morning <span class="pill">Term Apr 2026 – Feb 2027</span><span class="sp"></span><span class="btn">Share as PDF / WhatsApp ▸</span></h1>
+  <div class="card tw"><table><tr><th>Subject</th><th>Weekly slots</th><th>/wk</th><th>Mentor</th></tr>
+    <tr><td>Maths</td><td><span class="pill">Mon 16:00 · 90m · R-1</span> <span class="pill">Wed 16:00 · 90m · R-1</span> <span class="pill">Sat 10:00 · 120m · Hybrid</span> <span class="btn">+</span></td><td>3</td><td>Rahul</td></tr>
+    <tr><td>Science</td><td><span class="pill">Tue 16:00 · 90m · R-1</span> <span class="pill">Thu 16:00 · 90m · R-1</span> <span class="btn">+</span></td><td>2</td><td>Neha</td></tr>
+    <tr><td>English</td><td><span class="pill">Fri 16:00 · 60m · R-2</span> <span class="btn">+</span></td><td>1</td><td>Arjun</td></tr></table></div>
+  <div class="card"><h2>Slot editor</h2><div class="row"><span class="mut">Subject default:</span><span class="pill">Maths 90 min ▾</span><span class="pill">English 60 min ▾</span><span class="mut">(inherited from course; any slot or single class can override)</span></div>
+    <div class="row"><span class="pill">Day: Sat ▾</span><span class="pill">Start 10:00</span><span class="mut">Duration</span><span class="pill">60</span><span class="pill">90</span><span class="pill" style="border-color:var(--accent)">● 120</span><span class="pill">180</span><span class="pill">custom</span><span class="mut">→ ends 12:00</span><span class="pill">Room R-1 ▾</span><span class="pill">Mode Hybrid ▾</span><span class="pill">Mentor Rahul ▾</span><span class="pill">From 01-Apr-2026</span><span class="pill">Every week ▾</span></div>
+    <p class="warn">⚠ Clash: Sat 10:00 R-1 also used by "12 PCM – Physics"</p>
+    <div class="row"><span class="mut">✔ Skip holidays · generates 118 sessions this term</span><span class="sp" style="flex:1"></span><span class="btn p">Save slots</span></div></div>
+</section>
+
+<section id="extra">
+  <h1>+ Extra class</h1>
+  <div class="grid g2">
+    <div class="card">
+      <div class="row"><b style="width:80px">Batch</b><span class="pill">Class 10 CBSE Morning ▾</span><b>Subject</b><span class="pill">Maths ▾</span></div>
+      <div class="row"><b style="width:80px">Students</b>● Whole batch (31) ○ Pick students ○ Absentees of Mon 2 Nov (make-up)</div>
+      <div class="row"><b style="width:80px">When</b><span class="pill">Sun 8 Nov</span><span class="pill">Start 11:00</span><span class="pill">Duration 90 min ▾</span><span class="mut">→ 11:00–12:30</span><span class="pill">Offline ▾</span><span class="pill">R-1 ▾</span></div>
+      <div class="row"><b style="width:80px">Reason</b><span class="pill" style="flex:1">Extra practice before unit test</span></div>
+      <p class="ok">✔ No clashes for 31 students · room free</p>
+      <h2 style="margin-top:14px">Notify (defaults from Settings › Timetable)</h2>
+      <div class="row">✔ Send now · To: <b>● Both</b> ○ Students ○ Guardians</div>
+      <div class="row">Via: ✔ WhatsApp ✔ Email · Template <span class="pill">extra_class ▾</span></div>
+      <div class="row">Reminders: <span class="pill">✔ 1 day before</span><span class="pill">✔ 1 hour before</span><span class="btn">+</span></div>
+      <div class="row"><span class="btn" data-go="calendar">Cancel</span><span class="btn p" data-go="calendar">Add to calendar &amp; notify ▸</span></div></div>
+    <div class="card"><h2>WhatsApp preview</h2><div class="bubble" style="max-width:320px">📚 <b>Extra Maths class</b> for Aarav<br>🗓 Sun 8 Nov, 11:00–12:30<br>📍 Room R-1, RSC<br>Reason: Extra practice before unit test<br><br><span class="mut">— Rahul Shah Classes</span></div>
+      <p class="note">Every extra, cancelled or rescheduled class follows its notification config. Change the defaults once in Settings, or override them for a single class here.</p></div>
+  </div>
+</section>
+
+<section id="fees">
+  <h1>Fees · 2026-27<span class="sp"></span><span class="pill">Batch: All ▾</span><span class="pill">Subject: All ▾</span><span class="btn p">Record payment</span></h1>
+  <div class="grid g4"><div class="card kpi"><b>₹4,82,500</b><span>expected (Nov)</span></div><div class="card kpi"><b class="ok">₹3,10,000</b><span>collected · 64%</span></div><div class="card kpi"><b class="bad">₹38,500</b><span>overdue · 14 students</span></div><div class="card kpi"><b>₹12,000</b><span>advance credit</span></div></div>
+  <div class="card tw"><table><tr><th>Student</th><th>Monthly</th><th>Aug</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Balance</th></tr>
+    <tr><td>Aarav Mehta</td><td>₹5,000</td><td class="ok">✔ Paid</td><td class="ok">✔ Paid</td><td class="ok">✔ Paid</td><td class="warn">● Due</td><td class="mut">–</td><td>₹5,000</td></tr>
+    <tr><td><a data-go="feeprofile" style="color:var(--accent);cursor:pointer">Diya Patel</a></td><td>₹8,350¹</td><td class="ok">✔ Paid</td><td class="ok">✔ Paid</td><td class="warn">◐ ₹3,000</td><td class="warn">● Due</td><td class="mut">–</td><td>₹13,700</td></tr>
+    <tr><td>Kabir Singh</td><td>₹7,000</td><td class="ok">✔ Paid</td><td class="bad">✖ Overdue</td><td class="bad">✖ Overdue</td><td class="warn">● Due</td><td class="mut">–</td><td class="bad">₹21,000 ⚠</td></tr>
+    <tr><td>Meera Joshi</td><td>₹0 (scholarship)</td><td class="mut">Waived</td><td class="mut">Waived</td><td class="mut">Waived</td><td class="mut">Waived</td><td class="mut">–</td><td>–</td></tr>
+    <tr><td>Priya N (DS Bootcamp)</td><td>₹45,000 · 3 inst.</td><td colspan="2" class="ok">Inst 1 ✔</td><td class="ok">Inst 2 ✔</td><td class="warn">Inst 3 ● due 20 Nov</td><td></td><td>₹13,500</td></tr></table>
+    <p class="mut">¹ includes 10% sibling discount on Olympiad Physics. Click a cell to see the per-subject breakdown.</p>
+    <div class="row"><span class="mut">Selected →</span><span class="btn">Send reminder</span><span class="btn">Record payment</span><span class="btn">Export</span></div></div>
+</section>
+
+<section id="feeprofile">
+  <h1>◀ Diya Patel › Fees<span class="sp"></span><span class="btn">+ Fee line</span><span class="btn p">Record payment</span></h1>
+  <div class="card tw"><h2>Fee structure (per subject)</h2><table><tr><th>Subject</th><th>Batch</th><th>Rate card</th><th>Override</th><th>Discount</th><th>Net / month</th><th>From</th></tr>
+    <tr><td>Physics</td><td>JEE Alpha</td><td>₹2,500</td><td>—</td><td>—</td><td>₹2,500</td><td>Apr</td></tr>
+    <tr><td>Chemistry</td><td>JEE Alpha</td><td>₹2,500</td><td>—</td><td>—</td><td>₹2,500</td><td>Apr</td></tr>
+    <tr><td>Maths</td><td>JEE Alpha</td><td>₹2,500</td><td>₹2,000</td><td>—</td><td>₹2,000</td><td>Apr</td></tr>
+    <tr><td>Olympiad Physics</td><td>INPhO Core</td><td>₹1,500</td><td>—</td><td>10% sibling</td><td>₹1,350</td><td>Jul</td></tr>
+    <tr><td colspan="5" style="text-align:right"><b>Total / month</b></td><td><b>₹8,350</b></td><td></td></tr></table></div>
+  <div class="card tw"><h2>Ledger</h2><table>
+    <tr><td class="mut">2 Nov</td><td>Payment ₹3,000 · UPI ref 4421… → Oct (partial)</td><td>Receipt RSC/26-27/0412 · <span class="ok">sent on WhatsApp ✓✓</span></td></tr>
+    <tr><td class="mut">1 Nov</td><td>Due generated: Nov ₹8,350</td><td><span class="ok">fee_due sent to Mother ✓✓</span></td></tr>
+    <tr><td class="mut">1 Oct</td><td>Due generated: Oct ₹8,350</td><td></td></tr></table></div>
+</section>
+
+<section id="notes">
+  <h1>Log class · Class 10 CBSE · Maths <span class="pill">Mon 2 Nov 16:00–17:30</span></h1>
+  <div class="grid g2">
+    <div class="card">
+      <div class="row"><b style="width:110px">Topics covered</b><span class="pill">Quadratic Eq › Nature of roots ×</span><span class="pill">Discriminant ×</span><span class="btn">+ from syllabus</span></div>
+      <div class="row"><b style="width:110px">Summary</b><span class="pill" style="flex:1">Derived discriminant; solved Ex 4.3 Q1–8</span></div>
+      <div class="row"><b style="width:110px">Homework</b><span class="pill" style="flex:1">Ex 4.3 Q9–16 + worksheet</span><span class="pill">📎 worksheet-4.pdf</span></div>
+      <div class="row"><b style="width:110px"></b>Due <span class="pill">Wed 4 Nov</span> ✔ Track as assignment</div>
+      <div class="row"><b style="width:110px">Resources</b><span class="btn">+ link / file</span><span class="pill">Recording (optional)</span></div>
+      <h2 style="margin-top:14px">Send</h2>
+      <p>✔ To batch (28 present) · Students · WhatsApp<br>✔ Absentees (3) get <i>class_missed</i> · Both · WhatsApp + Email</p>
+      <div class="row"><span class="btn">Save only</span><span class="btn p">Save &amp; send ▸</span></div></div>
+    <div class="card"><h2>WhatsApp preview (student)</h2><div class="bubble" style="max-width:320px">📘 <b>Maths · Mon 2 Nov</b><br>Today: Nature of roots, Discriminant<br>Ex 4.3 Q1–8 solved in class.<br><br>📝 <b>Homework</b> (due Wed 4 Nov):<br>Ex 4.3 Q9–16 + worksheet (attached)<br><br><span class="mut">— Rahul Shah Classes</span></div>
+      <p class="note">Topics picked here update the batch's syllabus coverage %. Each entry also adds to the batch's class diary.</p></div>
+  </div>
+</section>
+
+<section id="reports">
+  <h1>Progress reports · October 2026 <span class="pill">Generated 1 Nov 06:00 · 312 drafts</span><span class="sp"></span><span class="btn">Preview PDF</span><span class="btn p">Send approved ▸</span></h1>
+  <div class="card">
+    <div class="row"><span class="pill">Batch: All ▾</span><span class="pill">Status: Draft ▾</span><span class="pill">Remark: Missing ▾</span><span class="btn">Approve selected</span></div>
+    <div class="tw"><table><tr><th>☐</th><th>Student</th><th>Att %</th><th>Avg %</th><th>HW done</th><th>Fees</th><th>Remark</th><th>Status</th></tr>
+      <tr><td>☐</td><td>Aarav Mehta</td><td>92</td><td>81</td><td>12/12</td><td class="ok">Paid</td><td>"Excellent consistency…" ✎</td><td class="ok">✔ ready</td></tr>
+      <tr><td>☐</td><td>Diya Patel</td><td class="warn">71 ⚠</td><td>64</td><td>9/12</td><td class="warn">Partial</td><td class="mut">(awaiting Neha) ✎</td><td>draft</td></tr>
+      <tr><td>☐</td><td>Kabir Singh</td><td>88</td><td>58</td><td>10/12</td><td class="bad">Overdue</td><td class="mut">— add ✎</td><td>draft</td></tr></table></div>
+    <p class="mut">Send: Guardians · WhatsApp + Email · PDF attached (bootcamp learners receive their own)</p>
+    <p class="note">🔒 Only the Owner can approve &amp; send reports. Nothing is sent automatically.</p></div>
+  <div class="card"><h2>PDF layout</h2><div class="grid g2"><div class="ph">Header: logo · student · month<br>Attendance by subject</div><div class="ph">Tests table + trend chart</div><div class="ph">Homework completion · topics covered</div><div class="ph">Fee status · remark · signature</div></div></div>
+</section>
+
+<section id="enquiries">
+  <h1>Enquiries <span class="pill">Nov: 46 · 12 admitted (26%)</span><span class="sp"></span><span class="pill">Course: All ▾</span><span class="pill">Source: All ▾</span><span class="btn p">+ Enquiry</span></h1>
+  <div class="tw"><div style="display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;min-width:1100px">
+    <div><h2>New (8)</h2><div class="card">Riya Shah<br><span class="mut">Class 9 · WhatsApp</span><br><span class="warn">⏰ today</span></div><div class="card">Om G<br><span class="mut">Olympiad · Referral</span></div></div>
+    <div><h2>Contacted (11)</h2><div class="card">Karan M<br><span class="mut">JEE · Walk-in</span><br>⏰ tomorrow</div></div>
+    <div><h2>Demo sched. (6)</h2><div class="card">Ansh T<br><span class="mut">Class 10</span><br>Demo Sat 10:00</div></div>
+    <div><h2>Demo done (5)</h2><div class="card">Priya N<br><span class="mut">DS Bootcamp</span><br><span class="bad">⏰ overdue ⚠</span></div></div>
+    <div><h2>Fee shared (4)</h2><div class="card">Dev P<br><span class="mut">JEE Dropper</span><br><span class="btn p">Convert ▸</span></div></div>
+    <div><h2>Admitted (12)</h2><div class="card mut">Sana Q · 10 CBSE</div></div>
+    <div><h2>Lost (5)</h2><div class="card mut">Neel R · Fees</div></div>
+  </div></div>
+  <div class="card"><h2>Card actions</h2><div class="row"><span class="btn">📞 Call</span><span class="btn">WhatsApp</span><span class="btn">Book demo</span><span class="btn">Send fee info</span><span class="btn">Set follow-up</span><span class="btn p">Convert to student ▸</span></div>
+    <p class="note">Convert wizard: ① confirm student + guardian → ② batch &amp; subjects → ③ review fee lines → Admit &amp; send welcome.</p></div>
+  <div class="card"><h2>Demo · Priya N (DS Bootcamp)</h2>
+    <div class="row"><b style="width:70px">Mode</b>○ In class (pick session) <b>● Phone call</b> ○ Video call</div>
+    <div class="row"><b style="width:70px">When</b><span class="pill">Tue 3 Nov</span><span class="pill">18:30</span><span class="pill">20 min</span>Taken by <span class="pill">Rahul ▾</span></div>
+    <div class="row"><b style="width:70px"></b>○ Schedule (send invite + reminder) <b>● Already done (log it)</b></div>
+    <div class="row"><b style="width:70px">Outcome</b><span class="pill">Interested ▾</span><span class="pill" style="flex:1">Wants weekend batch; asked about EMI</span></div>
+    <div class="row"><b style="width:70px">Follow-up</b><span class="pill">Thu 5 Nov</span><span class="sp" style="flex:1"></span><span class="btn p">Save demo</span></div></div>
+</section>
+
+<section id="backup">
+  <h1>Settings › Backup &amp; Export</h1>
+  <div class="card">
+    <div class="row"><b style="width:110px">Google Drive</b><span class="ok">● Connected</span><span class="pill">Folder: /RSC Classroom Backups</span></div>
+    <div class="row"><b style="width:110px">Schedule</b>Daily at <span class="pill">02:00</span> keep <span class="pill">30</span> daily + <span class="pill">12</span> monthly</div>
+    <div class="row"><b style="width:110px">Includes</b>✔ Database (encrypted) · ✔ Excel workbook · ✔ Files (weekly)</div>
+    <div class="row"><b style="width:110px">Last backup</b><span class="ok">✔ 2 Nov 02:00 · 18.4 MB · 41 s</span><span class="btn">Back up now</span><span class="btn">Restore…</span></div>
+    <div class="row"><b style="width:110px">History</b><span class="mut">1 Nov ✔ · 31 Oct ✔ · 30 Oct <span class="bad">✖ token expired</span> (re-connected) · 29 Oct ✔</span></div></div>
+  <div class="card"><h2>Export to Excel</h2>
+    <div class="row"><span class="btn p">Download everything (.xlsx)</span></div>
+    <div class="row">or choose: ✔ Students ✔ Attendance ✔ Marks ✔ Fees &amp; payments ☐ Messages ☐ Enquiries <span class="pill">2026-27 ▾</span><span class="btn">Export ▸</span></div>
+    <p class="note">One sheet per entity. Any filtered table in the app also has its own Export button.</p></div>
+</section>
+
+</main></div>
+<script>
+const screens=[["today","◉ Today"],["academics","▣ Academics"],["students","👤 Students"],["profile","  ↳ Student 360°"],["attendance","✓ Attendance"],["calendar","📅 Calendar"],["timetable","  ↳ Timetable"],["extra","  ↳ Extra class"],["notes","  ↳ Class notes"],["assess","📝 Assessments"],["compose","✉ Compose"],["delivery","  ↳ Delivery report"],["auto","⚡ Automations"],["reports","📄 Progress reports"],["enquiries","📞 Enquiries"],["fees","₹ Fees"],["feeprofile","  ↳ Student fees"],["mentors","🧑‍🏫 Mentors"],["settings","⚙ Settings"],["backup","  ↳ Backup & Export"]];
+const nav=document.getElementById('nav');
+nav.innerHTML=screens.map(([id,l])=>`<a data-go="${id}">${l}</a>`).join('');
+function go(id){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===id));document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.go===id));try{location.hash=id}catch(e){}window.scrollTo(0,0)}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-go]');if(t)go(t.dataset.go)});
+const kids=["Aarav Mehta","Ishita Rao","Rohan Das","Sneha Iyer","Vivaan Shah","Ananya Gupta"],codes=["P","A","L","E","O"],state=[0,1,2,0,0,0];
+const reg=document.getElementById('reg');
+function render(){reg.querySelectorAll('tr.r').forEach(r=>r.remove());kids.forEach((k,i)=>{const tr=document.createElement('tr');tr.className='r';tr.innerHTML=`<td>${i+1}</td><td>${k}</td><td><span class="st">${codes.map((c,j)=>`<span data-i="${i}" data-j="${j}" class="${state[i]===j?'on':''}">${c}</span>`).join('')}</span>${state[i]===1||state[i]===2?' <span class="mut">📱 parent</span>':''}</td><td>${state[i]===2?'15 min late':''}</td>`;reg.appendChild(tr)});
+const n=c=>state.filter(s=>s===c).length;document.getElementById('sum').textContent=`Summary: ${n(0)} P · ${n(1)} A · ${n(2)} L · ${n(3)} E · ${n(4)} O · parents of ${n(1)+n(2)} students will be notified`}
+reg.addEventListener('click',e=>{const s=e.target.closest('[data-j]');if(s){state[+s.dataset.i]=+s.dataset.j;render()}});
+render();
+// Week time-grid: block top = start offset, height = duration (1px per minute)
+const D0=7*60,D1=21*60,PX=1;
+const days=["Mon 2","Tue 3","Wed 4","Thu 5","Fri 6","Sat 7","Sun 8"],allDay={3:"⏰ DPP-15 due",6:"🏖 Holiday (half-day)"};
+const kinds={l:"Lecture",t:"Test",d:"Doubt",b:"Bootcamp",e:"Event",x:"Extra class"};
+const evs=[[0,"07:00",90,"JEE-A Physics","l","R-2"],[1,"07:00",90,"JEE-A Chemistry","l","R-2"],[2,"07:00",90,"JEE-A Maths","l","R-2"],[3,"07:00",90,"JEE-A Physics","l","R-2"],[4,"07:00",90,"JEE-A Chemistry","l","R-2"],
+[6,"09:00",180,"Mock Test 4 (JEE)","t","Hall"],[0,"16:00",90,"10C Maths","l","R-1"],[1,"16:00",90,"10C Science","l","R-1"],[2,"16:00",90,"10C Maths","l","R-1"],[3,"16:00",90,"10C Science","l","R-1"],[4,"16:00",60,"10C English","l","R-2"],
+[5,"10:00",120,"10C Maths (Sat slot)","l","R-1"],[5,"12:30",60,"PTM – Class 10","e","R-1"],[0,"17:30",60,"12 PCM Chemistry","l","R-3"],[1,"17:30",60,"12 PCM Physics","l","R-3"],[2,"17:30",60,"Test: Electrostatics","t","R-3"],[3,"17:30",60,"12 PCM Chemistry","l","R-3"],[4,"17:30",60,"12 PCM Physics","l","R-3"],
+[0,"19:00",60,"INMO doubt (online)","d","Meet"],[2,"19:00",90,"INMO Sr","l","R-2"],[1,"19:30",90,"DS Bootcamp (online)","b","Zoom"],[3,"19:30",90,"DS Bootcamp (online)","b","Zoom"],[5,"14:00",180,"DS Bootcamp – Module 4","b","Lab"],[6,"14:00",180,"DS Bootcamp – Project lab","b","Lab"],[6,"12:30",90,"＋ Extra: 10C Maths","x","R-1"]];
+const toM=t=>{const[a,b]=t.split(":");return +a*60+ +b},fmt=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+function drawWeek(){const wk=document.getElementById("wk");if(!wk)return;const H=(D1-D0)*PX;let html=`<div class="dh"></div>`+days.map(d=>`<div class="dh">${d}</div>`).join("");
+html+=`<div class="ad mut" style="font-size:10px">all-day</div>`+days.map((d,i)=>`<div class="ad">${allDay[i]?`<span class="ev">${allDay[i]}</span>`:""}</div>`).join("");
+let tc=`<div class="tc" style="height:${H}px">`;for(let m=D0;m<D1;m+=60)tc+=`<span style="top:${(m-D0)*PX}px">${fmt(m)}</span>`;html+=tc+"</div>";
+days.forEach((d,i)=>{html+=`<div class="dc" style="height:${H}px">`+evs.filter(e=>e[0]===i).map(([,st,du,lab,k,room])=>{const s=toM(st),dc=du>=120?"d120":du>=90?"d90":"d60";
+return `<div class="blk k-${k} ${dc}" data-go="${k==="x"?"extra":"attendance"}" title="${lab} · ${st}–${fmt(s+du)} · ${du} min · ${room}" style="top:${(s-D0)*PX}px;height:${du*PX-2}px"><span class="du">${du}m</span><b>${lab}</b><i>${st}–${fmt(s+du)} · ${room}</i></div>`}).join("")+"</div>"});
+wk.innerHTML=html}
+function setColour(byDur){const wk=document.getElementById("wk");wk.classList.toggle("bydur",byDur);document.getElementById("cbType").classList.toggle("p",!byDur);document.getElementById("cbDur").classList.toggle("p",byDur);
+document.getElementById("legend").innerHTML=byDur?"Duration: ░ ≤60m · ▒ 90m · ▓ 120m+":Object.entries(kinds).map(([k,v])=>`<span class="blk k-${k}" style="position:static;display:inline-block;padding:0 6px;margin-left:4px">${v}</span>`).join("")}
+drawWeek();setColour(false);
+document.getElementById("cbType").onclick=()=>setColour(false);document.getElementById("cbDur").onclick=()=>setColour(true);
+let h='today';try{h=location.hash.slice(1)||'today'}catch(e){}go(screens.some(s=>s[0]===h)?h:'today');
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+.next-test/
+.next-prodtest/
+
+# Exam Prep: generated Prisma client (rebuilt by npm install / npm run exam-prep:generate)
+/src/modules/exam-prep/generated/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# secrets: never commit
+.env
+.env.*
+!.env.example
+
+# local data
+/storage/
+/backups/
+*.log
+npm-debug.log*
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+
+# Chaos Creators: finished videos (big files; kept out of git)
+/src/Chaos creators/videos/

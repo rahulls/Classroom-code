@@ -1,0 +1,33 @@
+Video name,Maths Puzzle Quiz 1
+Badge on every question,MATHS PUZZLE
+Intro tag,TODAY'S PUZZLE
+Intro title line 1,Can you crack
+Intro title line 2,all 25 puzzles?
+Seconds per question,10
+
+question,option_a,option_b,option_c,option_d,answer,fact,seconds
+8 + 2 × 5 = ?,50,18,20,15,B,"BODMAS: multiply first. 2 × 5 = 10, then 8 + 10 = 18.",
+Which sign makes this true: 12 ? 4 = 3,+,−,×,÷,D,12 ÷ 4 = 3.,
+20% of 150 + 10% of 50 = ?,35,30,40,25,A,20% of 150 = 30 and 10% of 50 = 5. So 30 + 5 = 35.,
+"If 3 apples cost ₹45, how much do 7 apples cost?",₹95,₹115,₹105,₹135,C,One apple costs 45 ÷ 3 = ₹15. So 7 apples cost 7 × 15 = ₹105.,
+Divide 60 in the ratio 2 : 3. What is the bigger part?,24,30,40,36,D,"2 + 3 = 5 parts, so one part is 60 ÷ 5 = 12. The bigger part is 3 × 12 = 36.",
+A ₹200 toy's price goes up by 25%. What is the new price?,₹250,₹225,₹275,₹300,A,25% of 200 = 50. So the new price is 200 + 50 = ₹250.,
+9 × 9 + 9 = ?,99,162,90,81,C,9 × 9 = 81. Then 81 + 9 = 90.,
+"What comes next: 5, 10, 20, 40, ?",60,80,70,100,B,Each number is double the one before it: 40 × 2 = 80.,
+100 ÷ 4 × 2 = ?,12.5,25,200,50,D,÷ and × are done from left to right: 100 ÷ 4 = 25 and 25 × 2 = 50.,
+Which signs make this true: 6 ? 3 ? 2 = 20,× and +,+ and ×,× and −,+ and +,A,6 × 3 + 2 = 18 + 2 = 20.,
+Boys to girls in a class are 3 : 2. There are 30 students. How many are girls?,10,15,12,18,C,"3 + 2 = 5 parts, so one part is 30 ÷ 5 = 6. Girls are 2 × 6 = 12.",
+What is 25% of 25% of 400?,50,25,100,10,B,25% of 400 = 100. Then 25% of 100 = 25.,
+√144 + √25 = ?,13,19,169,17,D,√144 = 12 and √25 = 5. So 12 + 5 = 17.,
+2³ × 2 = ?,16,12,64,32,A,2³ = 2 × 2 × 2 = 8. Then 8 × 2 = 16.,
+"If A = 1, B = 2, C = 3, what is A + B + C + D?",6,9,10,12,C,D = 4. So 1 + 2 + 3 + 4 = 10.,
+50 − 5 × 4 + 2 = ?,182,32,28,36,B,"BODMAS: 5 × 4 = 20 first. Then 50 − 20 + 2 = 32.",
+A number divided by 4 and then plus 6 gives 11. What is the number?,44,17,24,20,D,Work backwards: 11 − 6 = 5 and 5 × 4 = 20.,
+Riya scored 45 out of 60. What is her percentage?,75%,70%,80%,65%,A,45 ÷ 60 = 0.75. So she scored 75%.,
+What is the simplest form of the ratio 18 : 24?,2 : 3,4 : 3,3 : 4,9 : 16,C,Divide both by 6: 18 ÷ 6 = 3 and 24 ÷ 6 = 4.,
+What is ¼ of ½ of 80?,20,10,5,40,B,½ of 80 = 40. Then ¼ of 40 = 10.,
+7 + 7 ÷ 7 + 7 × 7 − 7 = ?,56,0,49,50,D,"Divide and multiply first: 7 ÷ 7 = 1 and 7 × 7 = 49. So 7 + 1 + 49 − 7 = 50.",
+"What is the average of 4, 8, 12 and 16?",10,8,12,40,A,Add them: 4 + 8 + 12 + 16 = 40. Then 40 ÷ 4 = 10.,
+40% of a number is 60. What is the number?,120,240,150,100,C,10% of the number is 60 ÷ 4 = 15. So 100% is 15 × 10 = 150.,
+What is the remainder when 47 is divided by 5?,1,2,3,4,B,5 × 9 = 45. So the remainder is 47 − 45 = 2.,
+11 × 12 = ?,121,122,144,132,D,"Trick: 11 × 12 = 12 × 10 + 12 = 120 + 12 = 132.",
