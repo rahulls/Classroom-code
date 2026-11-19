@@ -3,7 +3,7 @@ import { answerDoubtAction, attendanceAction, attendeeAction, doubtAction, offer
 import { signedLink } from "@/modules/exam-prep/adapters/storage";
 import { epdb } from "@/modules/exam-prep/db";
 import { getSettings } from "@/modules/exam-prep/settings";
-import { ActionButton, EpForm, Field, Msg, Submit } from "../../ui";
+import { ActionButton, EpForm, Msg, Submit } from "../../ui";
 
 export const metadata = { title: "Plans" };
 
@@ -205,9 +205,7 @@ export default async function CommercialPage() {
         </table>
         {!payments.length && <p className="text-muted">No payments yet.</p>}
       </section>
-      <Field label="">
-        <span className="text-xs text-muted">Timed mocks: create a paper of kind “Timed full-length mock” on the Papers page.</span>
-      </Field>
+      <p className="text-xs text-muted">Timed mocks: create a paper of kind “Timed full-length mock” on the Papers page.</p>
     </div>
   );
 }

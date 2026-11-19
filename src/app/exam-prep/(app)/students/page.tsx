@@ -3,7 +3,7 @@ import { addPendingAction, addStudentAction, importIntakeAction } from "@/module
 import { epdb } from "@/modules/exam-prep/db";
 import { SUBJECTS_BY_CLASS } from "@/modules/exam-prep/domain/programme";
 import { intakeSummary } from "@/modules/exam-prep/services/people";
-import { EpForm, Field, IntakeFields, Msg, Submit } from "../../ui";
+import { EpForm, IntakeFields, Msg, Submit } from "../../ui";
 
 export const metadata = { title: "Students" };
 
@@ -170,9 +170,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
           <EpForm action={addStudentAction} className="space-y-3">
             <Msg />
             <IntakeFields subjectsByClass={SUBJECTS_BY_CLASS} />
-            <Field label="">
-              <Submit>Add student</Submit>
-            </Field>
+            <Submit>Add student</Submit>
           </EpForm>
         </section>
       </div>

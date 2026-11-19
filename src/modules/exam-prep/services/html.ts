@@ -8,12 +8,12 @@ export const esc = (s: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-export function pageHtml(o: { title: string; body: string; lang?: "en" | "hi"; footer?: string; onePage?: boolean }) {
+export function pageHtml(o: { title: string; body: string; lang?: "en" | "hi"; footer?: string; onePage?: boolean; scale?: number }) {
   const font = o.lang === "hi" ? `"Nirmala UI", "Mangal", "Noto Sans Devanagari", "Segoe UI", sans-serif` : `"Segoe UI", "Nirmala UI", Arial, sans-serif`;
   return `<!doctype html><html lang="${o.lang ?? "en"}"><head><meta charset="utf-8"><title>${esc(o.title)}</title><style>
 @page { size: A4; margin: 12mm 12mm 14mm; }
 * { box-sizing: border-box; }
-body { font-family: ${font}; color: #1d1838; font-size: ${o.onePage ? "10.5pt" : "11pt"}; line-height: 1.35; margin: 0; }
+body { font-family: ${font}; color: #1d1838; zoom: ${o.scale ?? 1}; font-size: ${o.onePage ? "10.5pt" : "11pt"}; line-height: 1.35; margin: 0; }
 h1 { font-size: 17pt; margin: 0 0 2mm; color: #2a1260; }
 h2 { font-size: 12pt; margin: 4mm 0 1.5mm; color: #2a1260; }
 .muted { color: #6b6585; font-size: 9pt; }
@@ -26,6 +26,7 @@ th { background: #f4f1fc; }
 .Strong { background: #dcf5e3; color: #11643a; } .Okay { background: #fff3cf; color: #7a5600; } .Needs { background: #fde2e2; color: #8c1d1d; }
 .bar { height: 2.2mm; background: #ece8f8; border-radius: 1mm; overflow: hidden; } .bar > i { display: block; height: 100%; background: #7a2fc0; }
 .q { margin: 0 0 3mm; page-break-inside: avoid; } .opts { margin: 1mm 0 0 6mm; }
-.footer { position: fixed; bottom: -8mm; left: 0; right: 0; font-size: 8pt; color: #6b6585; border-top: 1px solid #ece8f8; padding-top: 1mm; }
+.footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 8pt; color: #6b6585; border-top: 1px solid #ece8f8; padding-top: 1mm; background: #fff; }
+body { padding-bottom: 8mm; }
 </style></head><body>${o.body}${o.footer ? `<div class="footer">${o.footer}</div>` : ""}</body></html>`;
 }

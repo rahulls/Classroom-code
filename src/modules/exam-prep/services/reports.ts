@@ -37,6 +37,7 @@ const L = {
     revision: "A revision session on {chapter} is available for any student who wants it.",
     correction: "Correction",
     bands: { Strong: "Strong", Okay: "Okay", "Needs support": "Needs support" } as Record<string, string>,
+    cohort: { "Top third": "Top third", Middle: "Middle", "Needs support": "Needs support" } as Record<string, string>,
     tags: { concept: "Concept", calculation: "Calculation", missing_steps: "Missing steps", misread: "Misread question" } as Record<string, string>,
     tasks: (w: string[]) => [`Redo the listed questions without looking at the key.`, `Re-read your notes on ${w.join(" and ")} and solve 5 textbook questions from each.`, `Check your redo answers against Friday's worked solutions.`],
     parentAction: (w: string) => `Ask your child to spend 20 minutes a day this week on ${w}, then try the redo list.`,
@@ -62,6 +63,7 @@ const L = {
     revision: "{chapter} पर रिवीज़न सत्र किसी भी छात्र के लिए उपलब्ध है।",
     correction: "सुधार",
     bands: { Strong: "मज़बूत", Okay: "ठीक", "Needs support": "मदद चाहिए" } as Record<string, string>,
+    cohort: { "Top third": "ऊपरी तिहाई", Middle: "बीच में", "Needs support": "मदद की ज़रूरत" } as Record<string, string>,
     tags: { concept: "अवधारणा", calculation: "गणना", missing_steps: "चरण छूटे", misread: "प्रश्न गलत पढ़ा" } as Record<string, string>,
     tasks: (w: string[]) => [`सूची के प्रश्न बिना उत्तर-कुंजी देखे दोबारा हल करें।`, `${w.join(" और ")} के नोट्स दोबारा पढ़ें और हर अध्याय से 5 प्रश्न हल करें।`, `शुक्रवार के हल से अपने उत्तर मिलाएँ।`],
     parentAction: (w: string) => `इस हफ़्ते रोज़ 20 मिनट ${w} पर अभ्यास करवाएँ, फिर दोबारा-हल सूची करवाएँ।`,
@@ -103,7 +105,7 @@ async function reportData(studentId: string, paperId: string, audience: Audience
 export type ReportData = Awaited<ReturnType<typeof reportData>>;
 
 /** The one-page HTML. `compact` drops the optional blocks when a page would overflow. */
-export function reportHtml(d: ReportData, audience: Audience, s: Settings, compact = false) {
+export function reportHtml(d: ReportData, audience: Audience, s: Settings, compact = false, scale = 1) {
   const t = L[d.lang];
   const bandCls = (b: string) => (b === "Needs support" ? "Needs" : b);
   const rows = d.chapter_breakdown
@@ -120,7 +122,7 @@ export function reportHtml(d: ReportData, audience: Audience, s: Settings, compa
   } else {
     blocks.push(`<div class="row"><div class="box"><h2>${t.strong}</h2><p>${esc(d.strong.join(", "))}</p><h2>${t.weak}</h2><p>${esc(weak)}</p></div><div class="box"><h2>${t.action}</h2><p>${esc(t.parentAction(weak))}</p>${
       d.weak[0] ? `<p class="muted">${esc(t.revision.replace("{chapter}", d.weak[0]))}</p>` : ""
-    }${d.classBand ? `<h2>${t.classBand}</h2><p>${esc(d.classBand)}</p>` : ""}</div></div>`);
+    }${d.classBand ? `<h2>${t.classBand}</h2><p>${esc(t.cohort[d.classBand] ?? d.classBand)}</p>` : ""}</div></div>`);
   }
   if (!compact && d.paid) {
     const err = Object.entries(d.errors ?? {})
@@ -137,13 +139,17 @@ export function reportHtml(d: ReportData, audience: Audience, s: Settings, compa
 <div class="row"><div class="box"><b>${t.total}:</b> ${d.totals.got}/${d.totals.max} (${d.totals.pct}%)</div><div class="box"><b>${t.trend}:</b> ${esc(trendLine)}</div></div>
 <h2>${t.chapter}</h2><table><tr><th>${t.chapter}</th><th>${t.marks}</th><th></th><th>%</th><th>${t.band}</th></tr>${rows}</table>
 ${blocks.join("")}`;
-  return pageHtml({ title: `${d.paper.id} report`, lang: d.lang, onePage: true, body, footer: `Reply STOP to stop receiving these. · ${esc(s["brand.referralLine"])}` });
+  return pageHtml({ title: `${d.paper.id} report`, lang: d.lang, onePage: true, scale, body, footer: `Reply STOP to stop receiving these. · ${esc(s["brand.referralLine"])}` });
 }
 
 /** Renders and stores the PDF, keeping it to one page. */
 async function renderPdf(d: ReportData, audience: Audience, s: Settings, rel: string) {
+  // One page: full detail first, then without the optional blocks, then smaller type
   let bytes = await pdf.fromHtml(reportHtml(d, audience, s));
-  if ((await pageCount(bytes)) > 1) bytes = await pdf.fromHtml(reportHtml(d, audience, s, true));
+  for (const [compact, scale] of [[true, 1], [true, 0.9], [true, 0.8], [true, 0.7], [true, 0.6]] as const) {
+    if ((await pageCount(bytes)) <= 1) break;
+    bytes = await pdf.fromHtml(reportHtml(d, audience, s, compact, scale));
+  }
   await storage.save(rel, bytes);
   return { pages: await pageCount(bytes) };
 }

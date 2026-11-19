@@ -1,7 +1,9 @@
 import { currentTeacher } from "@/modules/exam-prep/auth";
+import { examPrepEnabled } from "@/modules/exam-prep/config";
 import { exportQuestions } from "@/modules/exam-prep/services/papers";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!examPrepEnabled()) return new Response("Not found", { status: 404 }); // feature flag off: no Exam Prep routes
   if (!(await currentTeacher())) return new Response("Forbidden", { status: 403 });
   const { id } = await params;
   const data = await exportQuestions(decodeURIComponent(id));
