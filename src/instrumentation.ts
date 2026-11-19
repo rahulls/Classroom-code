@@ -5,5 +5,10 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { ensureDeliveryLoop } = await import("@/modules/messages/service");
     ensureDeliveryLoop();
+    // Exam Prep (separate module, own database): its scheduler only starts when the feature flag is on
+    if (process.env.EXAM_PREP_ENABLED === "true") {
+      const { startExamPrepScheduler } = await import("@/modules/exam-prep/jobs");
+      startExamPrepScheduler();
+    }
   }
 }

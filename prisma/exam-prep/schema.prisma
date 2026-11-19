@@ -1,0 +1,564 @@
+// Exam Prep: its own database (EXAM_PREP_DATABASE_URL), its own client. Nothing here refers to the
+// classroom or the Chaos studio. Generate with `npm run exam-prep:generate`; migrations are SQL files in
+// ./migrations applied with `npm run exam-prep:migrate` (never `migrate dev`: see ASSUMPTIONS.md).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/modules/exam-prep/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("EXAM_PREP_DATABASE_URL")
+}
+
+// ------------------------------ access (one teacher) ------------------------------
+
+model TeacherAccount {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  totpSecret   String? // encrypted; two-step verification when set
+  createdAt    DateTime @default(now())
+}
+
+model AuthSession {
+  id         String   @id // sha256 of the cookie token
+  accountId  String
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+  twoStepOk  Boolean  @default(false)
+}
+
+model SignInLog {
+  id     String   @id @default(cuid())
+  at     DateTime @default(now())
+  ok     Boolean
+  reason String?
+}
+
+// ------------------------------ people and consent (R1) ------------------------------
+
+model Student {
+  id            String    @id @default(cuid())
+  code          String    @unique // e.g. EP-0001: what the student writes on forms; never their name in AI requests
+  name          String
+  klass         Int // 9-12
+  board         String // CBSE | ICSE-ISC | State | IGCSE | Other
+  stateBoard    String?
+  medium        String?
+  subjects      String[] // Maths | Science | Physics | Chemistry
+  school        String?
+  lastExamRange String?
+  status        String    @default("free") // free | paid1 | paid2 | opted_out
+  rankConsent   Boolean   @default(false)
+  label         String    @default("New") // New | Submitted | Report sent | Paid 1 | Paid 2 | Opted out
+  isDemo        Boolean   @default(false)
+  manualPath    Boolean   @default(false) // could not use the form: teacher files their sheets
+  source        String    @default("teacher") // google_form | csv | teacher
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  optedOutAt    DateTime?
+
+  parents     Parent[]
+  submissions Submission[]
+  reports     ReportCard[]
+  ranks       RankRecord[]
+  feedback    Feedback[]
+  plans       Plan[]
+  payments    Payment[]
+  offers      Offer[]
+  attendances SessionAttendee[]
+  doubts      Doubt[]
+
+  @@index([klass, board])
+}
+
+model Parent {
+  id                 String    @id @default(cuid())
+  studentId          String
+  student            Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  name               String
+  whatsapp           String // E.164, e.g. +919876543210
+  email              String?
+  language           String    @default("en") // en | hi
+  consentAt          DateTime?
+  consentTextVersion Int?
+  numberVerifiedAt   DateTime?
+  verifyDraftedAt    DateTime?
+  optedOutAt         DateTime?
+  reportTiming       String    @default("same") // same | after
+  createdAt          DateTime  @default(now())
+
+  replies ParentReply[]
+
+  @@index([studentId])
+}
+
+model ConsentText {
+  version   Int      @id
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model ParentReply {
+  id        String   @id @default(cuid())
+  parentId  String
+  parent    Parent   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  paperId   String?
+  note      String?
+  at        DateTime @default(now())
+}
+
+// ------------------------------ papers (R2) ------------------------------
+
+model ChapterList {
+  id       String   @id @default(cuid())
+  klass    Int
+  subject  String
+  board    String
+  chapters String[] // syllabus order
+
+  @@unique([klass, subject, board])
+}
+
+model Paper {
+  id           String    @id // C10-MAT-P1-CBSE (v2+: C10-MAT-P1-CBSE-v2)
+  baseId       String // C10-MAT-P1-CBSE for every version
+  version      Int       @default(1)
+  klass        Int
+  subject      String
+  board        String
+  number       Int // 0 = diagnostic
+  title        String
+  kind         String    @default("paper") // paper | mock | quiz
+  pattern      String    @default("CBSE") // board pattern template
+  mockMinutes  Int?
+  opensAt      DateTime?
+  dueAt        DateTime?
+  graceHours   Int?
+  status       String    @default("draft") // draft | published | closed | marked | reported
+  isDiagnostic Boolean   @default(false)
+  isCurrent    Boolean   @default(true) // newest version
+  createdAt    DateTime  @default(now())
+  publishedAt  DateTime?
+
+  sections    Section[]
+  items       PaperQuestion[]
+  submissions Submission[]
+
+  @@index([klass, subject, board])
+}
+
+model Section {
+  id      String @id @default(cuid())
+  paperId String
+  paper   Paper  @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  name    String // A, B, C ...
+  type    String // mcq | short | long | case
+  order   Int
+
+  items PaperQuestion[]
+}
+
+/// A question in the bank; papers use it through PaperQuestion, so one question can be reused.
+model Question {
+  id            String   @id @default(cuid())
+  klass         Int
+  subject       String
+  board         String
+  chapter       String
+  topic         String
+  marks         Float
+  type          String // mcq | short | long | case | assertion
+  difficulty    String // easy | medium | hard
+  text          String
+  options       String[] // MCQ options A-D
+  correctOption String? // A | B | C | D
+  markingScheme Json? // [{ step, marks }]
+  solution      String?
+  createdAt     DateTime @default(now())
+
+  uses PaperQuestion[]
+}
+
+model PaperQuestion {
+  id         String   @id @default(cuid())
+  paperId    String
+  paper      Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  sectionId  String
+  section    Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  number     Int
+
+  @@unique([paperId, number])
+}
+
+// ------------------------------ calendar and jobs (R3) ------------------------------
+
+model Slot {
+  id      String   @id @default(cuid())
+  week    Int
+  klass   Int
+  subject String
+  board   String
+  opensAt DateTime
+  dueAt   DateTime
+  paperId String?
+
+  @@unique([week, klass, subject, board])
+}
+
+model Task {
+  id        String    @id @default(cuid())
+  dedupeKey String    @unique
+  week      Int?
+  kind      String // post | reminder | private_reminders | key | review | reports | class_note | ...
+  title     String
+  dueAt     DateTime
+  paperId   String?
+  messageId String?
+  doneAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model JobRun {
+  id        String   @id @default(cuid())
+  job       String
+  periodKey String
+  ranAt     DateTime @default(now())
+  result    Json?
+
+  @@unique([job, periodKey])
+}
+
+// ------------------------------ submissions and marking (R4, R5) ------------------------------
+
+model Submission {
+  id           String    @id @default(cuid())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  paperId      String
+  paper        Paper     @relation(fields: [paperId], references: [id])
+  submittedAt  DateTime
+  source       String // form | dm_manual | google_form
+  files        Json // [{ path, size, pages, name }]
+  status       String    @default("received") // received | filed | flagged | marked
+  flags        String[]
+  isLate       Boolean   @default(false)
+  isCurrent    Boolean   @default(true) // latest wins; earlier rows stay as history
+  sectionTimes Json? // { A: minutes, ... }
+  createdAt    DateTime  @default(now())
+
+  mcq        McqResponse[]
+  marks      Mark[]
+  selfMarks  SelfMarkEntry[]
+  spotChecks SpotCheck[]
+
+  @@index([paperId, isCurrent])
+  @@index([studentId])
+}
+
+model McqResponse {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  chosenOption String?
+  marksAwarded Float
+
+  @@unique([submissionId, questionId])
+}
+
+model Mark {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  marksAwarded Float
+  source       String // auto | ai | teacher | self
+  aiProposed   Float?
+  aiConfidence Float?
+  aiReasoning  String?
+  aiErrorTag   String?
+  needsReview  Boolean    @default(false)
+  errorTag     String     @default("none") // concept | calculation | missing_steps | misread | none
+  qualityNote  String? // answer-quality note (paid tier)
+  reviewedAt   DateTime?
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([submissionId, questionId])
+}
+
+/// What the AI adapter was sent: kept (without the image) so tests and the teacher can check no personal data left.
+model AiRequestLog {
+  id           String   @id @default(cuid())
+  submissionId String
+  questionId   String
+  payload      Json
+  at           DateTime @default(now())
+}
+
+model SelfMarkEntry {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  marksClaimed Float
+
+  @@unique([submissionId, questionId])
+}
+
+model SpotCheck {
+  id           String     @id @default(cuid())
+  paperId      String
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  selectedAt   DateTime   @default(now())
+  result       String? // match | mismatch
+  deltaMarks   Float?
+  checkedAt    DateTime?
+
+  @@unique([paperId, submissionId])
+}
+
+model CorrectionNote {
+  id         String   @id @default(cuid())
+  studentId  String
+  paperId    String
+  note       String
+  createdAt  DateTime @default(now())
+  reportedIn String? // ReportCard id that mentioned it
+}
+
+// ------------------------------ reports and ranks (R7, R8) ------------------------------
+
+model ReportCard {
+  id        String    @id @default(cuid())
+  studentId String
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  paperId   String
+  parentId  String? // parent audience: which guardian
+  audience  String // student | parent
+  language  String    @default("en")
+  data      Json // totals, chapter_breakdown, bands, trend, weak, strong, ... (never ranks)
+  pdfPath   String?
+  status    String    @default("draft") // draft | ready | sent | failed
+  channel   String? // email | whatsapp_manual
+  sentAt    DateTime?
+  error     String?
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@unique([studentId, paperId, audience, parentId])
+}
+
+/// Teacher-only. Never read by anything a student or parent sees.
+model RankRecord {
+  id           String    @id @default(cuid())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  paperId      String
+  cohortKey    String
+  cohortSize   Int
+  rank         Int?
+  band         String // Top third | Middle | Needs support
+  percentage   Float
+  previousRank Int?
+  toldAt       DateTime?
+  toldBy       String?
+  channel      String?
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([studentId, paperId])
+}
+
+// ------------------------------ messaging (R9) ------------------------------
+
+model MessageTemplate {
+  key         String   @id
+  audience    String // group | parent | student
+  description String
+  body        String
+  bodyHi      String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  dedupeKey   String?   @unique
+  templateKey String
+  audience    String // group | parent | student
+  tags        String[]
+  body        String
+  studentId   String?
+  parentId    String?
+  paperId     String?
+  waLink      String?
+  status      String    @default("drafted") // drafted | sent | failed
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+// ------------------------------ commercial (R10) ------------------------------
+
+model Plan {
+  id        String    @id @default(cuid())
+  studentId String
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tier      String // free_report | paid1 | paid2
+  subjects  Int       @default(1)
+  startedAt DateTime
+  endsAt    DateTime?
+  price     Float
+  discount  Float     @default(0)
+  isTrial   Boolean   @default(false)
+  status    String    @default("active") // active | ended | cancelled
+
+  payments Payment[]
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  planId    String?
+  plan      Plan?    @relation(fields: [planId], references: [id])
+  amount    Float
+  method    String // UPI | cash | bank
+  reference String?
+  receiptNo String   @unique
+  paidAt    DateTime
+}
+
+model Offer {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reason    String
+  chapter   String
+  subject   String
+  messageId String?
+  status    String   @default("suggested") // suggested | sent | accepted | declined
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, subject, chapter])
+}
+
+model TeachingSession {
+  id        String   @id @default(cuid())
+  type      String // revision | chapter | doubt | workshop | mock | parent_call
+  klass     Int
+  board     String
+  subject   String
+  chapter   String?
+  offerId   String?
+  startsAt  DateTime
+  capacity  Int
+  notes     String?
+
+  attendees SessionAttendee[]
+  doubts    Doubt[]
+}
+
+model SessionAttendee {
+  id        String          @id @default(cuid())
+  sessionId String
+  session   TeachingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  attended  Boolean?
+
+  @@unique([sessionId, studentId])
+}
+
+model Doubt {
+  id        String           @id @default(cuid())
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionId String?
+  session   TeachingSession? @relation(fields: [sessionId], references: [id])
+  filePath  String?
+  note      String?
+  status    String           @default("open") // open | answered | closed
+  response  String?
+  createdAt DateTime         @default(now())
+}
+
+// ------------------------------ feedback, metrics (R12, R13) ------------------------------
+
+model Feedback {
+  id                 String   @id @default(cuid())
+  studentId          String
+  student            Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  paperId            String
+  difficulty         String // too_easy | right | too_hard
+  nextChapterRequest String?
+  rating             Int?
+  createdAt          DateTime @default(now())
+
+  @@unique([studentId, paperId])
+}
+
+model WorkloadEntry {
+  id        String   @id @default(cuid())
+  weekStart DateTime @unique
+  hours     Float
+  note      String?
+}
+
+model Complaint {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  note      String
+  reviewed  Boolean  @default(false)
+}
+
+model ReviewCheck {
+  id        String   @id @default(cuid())
+  weekStart DateTime
+  item      String
+  doneAt    DateTime @default(now())
+
+  @@unique([weekStart, item])
+}
+
+// ------------------------------ settings, audit, privacy (R11, R14) ------------------------------
+
+model Setting {
+  key       String   @id
+  value     Json
+  scope     String   @default("global")
+  updatedAt DateTime @updatedAt
+}
+
+/// Append-only (no update or delete anywhere in the code; a database trigger refuses them too).
+model AuditLog {
+  id       String   @id @default(cuid())
+  actor    String
+  action   String
+  entity   String
+  entityId String
+  old      Json?
+  new      Json?
+  at       DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
+model DeletionRequest {
+  id                 String    @id @default(cuid())
+  studentId          String // kept as a bare id: the student row itself is gone afterwards
+  studentCode        String
+  requestedAt        DateTime  @default(now())
+  completedAt        DateTime?
+  confirmationSentAt DateTime?
+  summary            Json?
+}
+
+model ReceiptCounter {
+  id   String @id @default("receipt")
+  next Int    @default(1)
+}

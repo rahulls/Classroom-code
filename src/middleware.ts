@@ -7,7 +7,9 @@ import { IS_LOOPBACK, SESSION_COOKIE } from "./core/auth/cookie";
 // Note: middleware is a convenience gate, NOT the security boundary. Every page and
 // server action independently calls requireUser() / defineAction().
 
-const PUBLIC_PATHS = ["/login", "/setup"];
+// /exam-prep is a separate module with its own sign-in (src/modules/exam-prep/auth.ts): the classroom
+// session gate does not apply to it. Exam Prep checks its own session on every page and action.
+const PUBLIC_PATHS = ["/login", "/setup", "/exam-prep"];
 
 export function middleware(req: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
