@@ -51,6 +51,7 @@ export async function proposeWithAi(paperId: string) {
         questionText: it.question.text,
         maxMarks: it.question.marks,
         markingScheme: (it.question.markingScheme as { step: string; marks: number }[]) ?? [],
+        ...(it.question.orText ? { alternativeText: it.question.orText, alternativeScheme: (it.question.orMarkingScheme as { step: string; marks: number }[]) ?? [] } : {}),
         sheet: { mediaType: "application/pdf", base64 },
       };
       // Personal data never leaves: refuse a request carrying the name, a parent's number or email, or the school

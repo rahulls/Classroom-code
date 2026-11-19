@@ -15,6 +15,9 @@ export type MarkRequest = {
   questionText: string;
   maxMarks: number;
   markingScheme: { step: string; marks: number }[];
+  /** CBSE internal choice: the (B) alternative; the student answers one of the two */
+  alternativeText?: string;
+  alternativeScheme?: { step: string; marks: number }[];
   sheet: { mediaType: "application/pdf" | "image/jpeg" | "image/png"; base64: string };
 };
 
@@ -24,7 +27,7 @@ export interface AiMarker {
   propose(r: MarkRequest, s: Settings): Promise<MarkProposal>;
 }
 
-const ALLOWED = new Set(["studentCode", "questionId", "questionNumber", "questionText", "maxMarks", "markingScheme", "sheet"]);
+const ALLOWED = new Set(["studentCode", "questionId", "questionNumber", "questionText", "maxMarks", "markingScheme", "alternativeText", "alternativeScheme", "sheet"]);
 const PHONE = /(\+?\d[\d\s-]{8,}\d)/;
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/;
 
@@ -56,7 +59,10 @@ const claudeMarker: AiMarker = {
     const key = s["marking.aiKey"] ? decrypt(s["marking.aiKey"]) : process.env.EXAM_PREP_ANTHROPIC_KEY;
     if (!key) throw new Error("Add a Claude API key in Exam Prep settings first.");
     const client = new Anthropic({ apiKey: key });
-    const scheme = r.markingScheme.map((st, i) => `${i + 1}. ${st.step} (${st.marks} mark${st.marks === 1 ? "" : "s"})`).join("\n");
+    const fmt = (sch: { step: string; marks: number }[]) => sch.map((st, i) => `${i + 1}. ${st.step} (${st.marks} mark${st.marks === 1 ? "" : "s"})`).join("\n");
+    const scheme = r.alternativeText
+      ? `(A) ${fmt(r.markingScheme)}\n\nThis question has an internal choice. The student answers EITHER (A) above OR (B):\n(B) ${r.alternativeText}\nMarking scheme for (B):\n${fmt(r.alternativeScheme ?? [])}\n\nFind which one the student attempted and mark it by its own scheme.`
+      : fmt(r.markingScheme);
     const sheetBlock =
       r.sheet.mediaType === "application/pdf"
         ? ({ type: "document", source: { type: "base64", media_type: "application/pdf", data: r.sheet.base64 } } as const)

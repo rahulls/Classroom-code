@@ -478,3 +478,37 @@ describe("Uploaded papers (the tutor's own PDF or CSV)", () => {
     expect(storage.exists(v2.path)).toBe(false);
   });
 });
+
+describe("CBSE board paper with internal choices (OR)", () => {
+  it("imports the practice paper exactly: 38 questions, 80 marks, sections A-E, OR in Q21, 22, 28, 31, 34-38", async () => {
+    const { importQuestions, paperWithQuestions, exportQuestions } = await import("../services/papers");
+    const { NCERT } = await import("../seed/chapters");
+    await setChapterList(10, "Maths", "CBSE", NCERT["10|Maths"]!);
+    const p = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 11 });
+    const json = fs.readFileSync(path.resolve(__dirname, "../../../../design/sample-papers/cbse-class10-maths-practice-1.json"), "utf8");
+    const r = await importQuestions(p.id, json);
+    expect(r.errors).toEqual([]);
+    expect(r.imported).toBe(38);
+    const full = (await paperWithQuestions(p.id))!;
+    const by = (sec: string) => full.items.filter((i) => i.section.name === sec);
+    expect(["A", "B", "C", "D", "E"].map((s) => [by(s).length, by(s).reduce((a, i) => a + i.question.marks, 0)])).toEqual([[20, 20], [5, 10], [6, 18], [4, 20], [3, 12]]);
+    expect(full.items.filter((i) => i.question.orText).map((i) => i.number)).toEqual([21, 22, 28, 31, 34, 35, 36, 37, 38]);
+    for (const i of full.items.filter((x) => x.question.orText)) {
+      const sum = ((i.question.orMarkingScheme as { marks: number }[]) ?? []).reduce((a, s) => a + s.marks, 0);
+      expect(sum, `Q${i.number} OR scheme`).toBe(i.question.marks);
+    }
+    await publishPaper(p.id);
+    expect((await exportQuestions(p.id)).questions.filter((q) => "or" in q)).toHaveLength(9);
+    // The AI request for an OR question carries the alternative and still passes the redaction check
+    const st = await student();
+    await addSubmission({ studentId: st.id, paperId: p.id, files: [{ name: "s.pdf", bytes: await fakeSheet() }], source: "form" });
+    await proposeWithAi(p.id);
+    const q21 = full.items.find((i) => i.number === 21)!;
+    const log = await epdb.aiRequestLog.findFirstOrThrow({ where: { questionId: q21.questionId } });
+    expect((log.payload as { alternativeText?: string }).alternativeText).toContain("runners");
+    // An OR scheme that doesn't add up is refused
+    const p2 = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 12 });
+    const sec = await epdb.section.findFirstOrThrow({ where: { paperId: p2.id, name: "B" } });
+    await expect(addQuestion(p2.id, sec.id, { chapter: "Real Numbers", topic: "t", marks: 2, type: "short", difficulty: "easy", text: "Question one?", options: [], markingScheme: [{ step: "a", marks: 2 }], or: { text: "Question two?", markingScheme: [{ step: "b", marks: 1 }] } } as never)).rejects.toThrow(/OR question's marking scheme/);
+  });
+});

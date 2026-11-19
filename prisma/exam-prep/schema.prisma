@@ -198,6 +198,10 @@ model Question {
   correctOption String? // A | B | C | D
   markingScheme Json? // [{ step, marks }]
   solution      String?
+  /// Internal choice (CBSE "OR"): the alternative question (B), same chapter and marks
+  orText          String?
+  orMarkingScheme Json?
+  orSolution      String?
   createdAt     DateTime @default(now())
 
   uses PaperQuestion[]

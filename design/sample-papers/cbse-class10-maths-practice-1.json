@@ -1,0 +1,1018 @@
+{
+  "paper": {
+    "title": "PRACTICE QUESTION PAPER – 1",
+    "code": "C10-MAT-P1-CBSE",
+    "klass": 10,
+    "subject": "Maths",
+    "board": "CBSE",
+    "totalMarks": 80,
+    "minutes": 180,
+    "format": "CBSE board paper (SQP 2026-27 design)"
+  },
+  "questions": [
+    {
+      "number": 1,
+      "section": "A",
+      "chapter": "Real Numbers",
+      "topic": "HCF word problem",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "The greatest number which divides both 285 and 1249, leaving remainders 9 and 7 respectively, is:",
+      "options": [
+        "69",
+        "138",
+        "46",
+        "23"
+      ],
+      "correctOption": "B",
+      "solution": "285 − 9 = 276 = 2² × 3 × 23 and 1249 − 7 = 1242 = 2 × 3³ × 23. HCF = 2 × 3 × 23 = 138."
+    },
+    {
+      "number": 2,
+      "section": "A",
+      "chapter": "Polynomials",
+      "topic": "Zeroes and coefficients",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "If one of the zeroes of the polynomial x² − 5x + k is 2, then the other zero is:",
+      "options": [
+        "2",
+        "– 3",
+        "3",
+        "6"
+      ],
+      "correctOption": "C",
+      "solution": "Sum of zeroes = 5, so the other zero = 5 − 2 = 3."
+    },
+    {
+      "number": 3,
+      "section": "A",
+      "chapter": "Pair of Linear Equations in Two Variables",
+      "topic": "Infinitely many solutions",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "The value of k for which the pair of linear equations 2x + 3y = 7 and (k – 1)x + (k + 2)y = 3k has infinitely many solutions is:",
+      "options": [
+        "7",
+        "5",
+        "– 7",
+        "3"
+      ],
+      "correctOption": "A",
+      "solution": "2/(k − 1) = 3/(k + 2) = 7/3k. From the first two, 2k + 4 = 3k − 3, so k = 7; check 3/9 = 7/21 = 1/3."
+    },
+    {
+      "number": 4,
+      "section": "A",
+      "chapter": "Quadratic Equations",
+      "topic": "Nature of roots",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "The values of k for which the quadratic equation 2x² + kx + 3 = 0 has two equal roots are:",
+      "options": [
+        "± √6",
+        "2√6 only",
+        "± 6",
+        "± 2√6"
+      ],
+      "correctOption": "D",
+      "solution": "Equal roots: k² − 4(2)(3) = 0, so k² = 24 and k = ± 2√6."
+    },
+    {
+      "number": 5,
+      "section": "A",
+      "chapter": "Arithmetic Progressions",
+      "topic": "nth term",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "Which term of the A.P.: 21, 18, 15, … is – 81?",
+      "options": [
+        "34th",
+        "35th",
+        "36th",
+        "33rd"
+      ],
+      "correctOption": "B",
+      "solution": "a = 21, d = – 3. 21 + (n − 1)(– 3) = – 81, so n − 1 = 34 and n = 35."
+    },
+    {
+      "number": 6,
+      "section": "A",
+      "chapter": "Triangles",
+      "topic": "Criteria for similarity",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "In ΔABC and ΔDEF, AB/DE = BC/FD. The two triangles will be similar if:",
+      "options": [
+        "∠B = ∠E",
+        "∠A = ∠D",
+        "∠B = ∠D",
+        "∠A = ∠F"
+      ],
+      "correctOption": "C",
+      "solution": "The sides AB, BC of ΔABC are proportional to DE, FD of ΔDEF. The included angles ∠B and ∠D must be equal (SAS similarity)."
+    },
+    {
+      "number": 7,
+      "section": "A",
+      "chapter": "Coordinate Geometry",
+      "topic": "Section formula",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "The coordinates of the point which divides the line segment joining the points (– 1, 7) and (4, – 3) in the ratio 2 : 3 are:",
+      "options": [
+        "(2, 3)",
+        "(3, 1)",
+        "(1, – 3)",
+        "(1, 3)"
+      ],
+      "correctOption": "D",
+      "solution": "x = (2(4) + 3(– 1))/5 = 1, y = (2(– 3) + 3(7))/5 = 3. The point is (1, 3)."
+    },
+    {
+      "number": 8,
+      "section": "A",
+      "chapter": "Introduction to Trigonometry",
+      "topic": "Standard angles",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "If sin (A – B) = 1/2 and cos (A + B) = 1/2, 0° < A + B ≤ 90°, A > B, then the values of A and B respectively are:",
+      "options": [
+        "60°, 30°",
+        "45°, 30°",
+        "45°, 15°",
+        "30°, 15°"
+      ],
+      "correctOption": "C",
+      "solution": "A − B = 30° and A + B = 60°, so A = 45° and B = 15°."
+    },
+    {
+      "number": 9,
+      "section": "A",
+      "chapter": "Probability",
+      "topic": "Prime numbers",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "A number is selected at random from the numbers 1 to 30. The probability that the number selected is a prime number is:",
+      "options": [
+        "1/3",
+        "2/3",
+        "11/30",
+        "3/10"
+      ],
+      "correctOption": "A",
+      "solution": "Primes up to 30: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29 (10 numbers). P = 10/30 = 1/3."
+    },
+    {
+      "number": 10,
+      "section": "A",
+      "chapter": "Areas Related to Circles",
+      "topic": "Distance covered by a wheel",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "The radius of a wheel is 35 cm. The distance covered by the wheel in 500 complete revolutions is:",
+      "options": [
+        "11 km",
+        "1.1 km",
+        "110 m",
+        "2.2 km"
+      ],
+      "correctOption": "B",
+      "solution": "Circumference = 2 × 22/7 × 35 = 220 cm. Distance = 500 × 220 = 1,10,000 cm = 1.1 km."
+    },
+    {
+      "number": 11,
+      "section": "A",
+      "chapter": "Surface Areas and Volumes",
+      "topic": "Cubes joined end to end",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "Three cubes each of side 4 cm are joined end to end to form a cuboid. The surface area of the resulting cuboid is:",
+      "options": [
+        "288 cm²",
+        "192 cm²",
+        "224 cm²",
+        "256 cm²"
+      ],
+      "correctOption": "C",
+      "solution": "Cuboid 12 cm × 4 cm × 4 cm. Surface area = 2(48 + 16 + 48) = 224 cm²."
+    },
+    {
+      "number": 12,
+      "section": "A",
+      "chapter": "Statistics",
+      "topic": "Combined mean",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "The mean of 20 observations is 15 and the mean of another 30 observations is 20. The mean of all the 50 observations is:",
+      "options": [
+        "17.5",
+        "18",
+        "17",
+        "19"
+      ],
+      "correctOption": "B",
+      "solution": "Mean = (20 × 15 + 30 × 20)/50 = 900/50 = 18."
+    },
+    {
+      "number": 13,
+      "section": "A",
+      "chapter": "Probability",
+      "topic": "Two dice",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "Two dice are rolled simultaneously. The probability of getting the same number on both the dice is:",
+      "options": [
+        "1/36",
+        "1/12",
+        "1/6",
+        "1/3"
+      ],
+      "correctOption": "C",
+      "solution": "Doublets: (1,1), (2,2), …, (6,6) = 6 outcomes out of 36. P = 1/6."
+    },
+    {
+      "number": 14,
+      "section": "A",
+      "chapter": "Coordinate Geometry",
+      "topic": "Length of a median",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "AD is a median of ΔABC with vertices A (4, 5), B (2, – 1) and C (6, 3). The length of AD is:",
+      "options": [
+        "4 units",
+        "2√5 units",
+        "5 units",
+        "3√2 units"
+      ],
+      "correctOption": "A",
+      "solution": "D = (4, 1), the mid-point of BC. AD = √((4 − 4)² + (5 − 1)²) = 4 units."
+    },
+    {
+      "number": 15,
+      "section": "A",
+      "chapter": "Areas Related to Circles",
+      "topic": "Arc and sector",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "The length of an arc of a circle is 4π cm and the area of the sector it bounds is 12π cm². The radius of the circle is:",
+      "options": [
+        "3 cm",
+        "6 cm",
+        "12 cm",
+        "9 cm"
+      ],
+      "correctOption": "B",
+      "solution": "Area of sector = 1/2 × arc × r, so 12π = 1/2 × 4π × r and r = 6 cm."
+    },
+    {
+      "number": 16,
+      "section": "A",
+      "chapter": "Statistics",
+      "topic": "Empirical relation",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "easy",
+      "text": "If the mode and the mean of a data are 26 and 20 respectively, then the median of the data is:",
+      "options": [
+        "21",
+        "23",
+        "22",
+        "24"
+      ],
+      "correctOption": "C",
+      "solution": "3 Median = Mode + 2 Mean = 26 + 40 = 66, so Median = 22."
+    },
+    {
+      "number": 17,
+      "section": "A",
+      "chapter": "Some Applications of Trigonometry",
+      "topic": "Heights and distances",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "A ladder 10 m long rests against a vertical wall and makes an angle θ with the ground such that tan θ = 4/3. The height at which the ladder touches the wall is:",
+      "options": [
+        "6 m",
+        "7.5 m",
+        "9 m",
+        "8 m"
+      ],
+      "correctOption": "D",
+      "solution": "tan θ = 4/3 gives sin θ = 4/5. Height = 10 × 4/5 = 8 m."
+    },
+    {
+      "number": 18,
+      "section": "A",
+      "chapter": "Probability",
+      "topic": "Playing cards",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "All the face cards are removed from a well-shuffled pack of 52 playing cards. A card is drawn at random from the remaining cards. The probability of getting an ace is:",
+      "options": [
+        "1/13",
+        "1/10",
+        "3/40",
+        "4/13"
+      ],
+      "correctOption": "B",
+      "solution": "40 cards remain, 4 of them aces. P = 4/40 = 1/10."
+    },
+    {
+      "number": 19,
+      "section": "A",
+      "chapter": "Coordinate Geometry",
+      "topic": "Assertion-Reason: collinear points",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "Assertion (A) : The points A (1, 2), B (3, 4) and C (5, 6) are collinear.\nReason (R) : Three points A, B and C are collinear if AB + BC = AC.",
+      "options": [
+        "Both Assertion (A) and Reason (R) are true and Reason (R) is the correct explanation of Assertion (A).",
+        "Both Assertion (A) and Reason (R) are true but Reason (R) is not the correct explanation of Assertion (A).",
+        "Assertion (A) is true but Reason (R) is false.",
+        "Assertion (A) is false but Reason (R) is true."
+      ],
+      "correctOption": "A",
+      "solution": "AB = 2√2, BC = 2√2, AC = 4√2, so AB + BC = AC. Both are true and R explains A."
+    },
+    {
+      "number": 20,
+      "section": "A",
+      "chapter": "Polynomials",
+      "topic": "Assertion-Reason: real zeroes",
+      "marks": 1,
+      "type": "mcq",
+      "difficulty": "medium",
+      "text": "Assertion (A) : The polynomial p(x) = x² + 3x + 3 has two real zeroes.\nReason (R) : The quadratic polynomial ax² + bx + c, a ≠ 0, has two distinct real zeroes if b² – 4ac > 0.",
+      "options": [
+        "Both Assertion (A) and Reason (R) are true and Reason (R) is the correct explanation of Assertion (A).",
+        "Both Assertion (A) and Reason (R) are true but Reason (R) is not the correct explanation of Assertion (A).",
+        "Assertion (A) is true but Reason (R) is false.",
+        "Assertion (A) is false but Reason (R) is true."
+      ],
+      "correctOption": "D",
+      "solution": "For p(x), b² − 4ac = 9 − 12 = – 3 < 0, so it has no real zeroes: A is false. R is a true statement."
+    },
+    {
+      "number": 21,
+      "section": "B",
+      "chapter": "Real Numbers",
+      "topic": "HCF and LCM word problems",
+      "marks": 2,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "Three pieces of rope are 64 m, 80 m and 96 m long. They are to be cut into pieces of equal length without any wastage. What is the greatest possible length of each piece? How many pieces will be obtained in all?",
+      "markingScheme": [
+        {
+          "step": "HCF(64, 80, 96) = 16, so each piece is 16 m long",
+          "marks": 1
+        },
+        {
+          "step": "Number of pieces = 4 + 5 + 6 = 15",
+          "marks": 1
+        }
+      ],
+      "solution": "64 = 2⁶, 80 = 2⁴ × 5, 96 = 2⁵ × 3. HCF = 2⁴ = 16 m. Pieces = 64/16 + 80/16 + 96/16 = 15.",
+      "or": {
+        "text": "Two runners start running together around a circular track from the same point. One completes a round in 18 minutes and the other in 12 minutes. After how many minutes will they meet again at the starting point? How many rounds will the faster runner have completed by then?",
+        "markingScheme": [
+          {
+            "step": "LCM(18, 12) = 36 minutes",
+            "marks": 1
+          },
+          {
+            "step": "The faster runner completes 36 ÷ 12 = 3 rounds",
+            "marks": 1
+          }
+        ],
+        "solution": "18 = 2 × 3², 12 = 2² × 3, LCM = 2² × 3² = 36 minutes. The faster runner completes 3 rounds."
+      }
+    },
+    {
+      "number": 22,
+      "section": "B",
+      "chapter": "Triangles",
+      "topic": "Basic Proportionality Theorem",
+      "marks": 2,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "In ΔABC, D and E are points on the sides AB and AC respectively such that AD = 2 cm, DB = 3 cm, AE = 3 cm and EC = 4.5 cm. Show that DE ∥ BC.",
+      "markingScheme": [
+        {
+          "step": "AD/DB = 2/3 and AE/EC = 3/4.5 = 2/3",
+          "marks": 1
+        },
+        {
+          "step": "By the converse of BPT, DE ∥ BC",
+          "marks": 1
+        }
+      ],
+      "solution": "AD/DB = AE/EC = 2/3, so DE divides AB and AC in the same ratio and, by the converse of the Basic Proportionality Theorem, DE ∥ BC.",
+      "or": {
+        "text": "In the given figure, DE ∥ BC. If AD = 4 cm, AB = 10 cm and AE = 6 cm, then find the length of AC.\nFor visually impaired candidates: In ΔABC, D and E are points on the sides AB and AC respectively such that DE ∥ BC. If AD/DB = 3/4 and AC = 21 cm, find the length of AE.",
+        "markingScheme": [
+          {
+            "step": "By BPT, AD/AB = AE/AC (VI: AD/DB = AE/EC)",
+            "marks": 1
+          },
+          {
+            "step": "AC = 15 cm (VI: AE = 9 cm)",
+            "marks": 1
+          }
+        ],
+        "solution": "4/10 = 6/AC, so AC = 15 cm. (VI: AE/EC = 3/4, so AE = 3/7 × 21 = 9 cm.)"
+      }
+    },
+    {
+      "number": 23,
+      "section": "B",
+      "chapter": "Introduction to Trigonometry",
+      "topic": "Trigonometric ratios",
+      "marks": 2,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "If sin θ = 3/5, then find the value of (tan θ + sec θ)/(cot θ + cosec θ).",
+      "markingScheme": [
+        {
+          "step": "cos θ = 4/5; tan θ = 3/4, sec θ = 5/4, cot θ = 4/3, cosec θ = 5/3",
+          "marks": 1
+        },
+        {
+          "step": "Value = 2/3",
+          "marks": 1
+        }
+      ],
+      "solution": "tan θ + sec θ = 3/4 + 5/4 = 2 and cot θ + cosec θ = 4/3 + 5/3 = 3. Value = 2/3."
+    },
+    {
+      "number": 24,
+      "section": "B",
+      "chapter": "Areas Related to Circles",
+      "topic": "Area of a sector from the arc",
+      "marks": 2,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "Find the area of a sector of a circle of radius 21 cm, if the length of the corresponding arc is 33 cm.",
+      "markingScheme": [
+        {
+          "step": "Area of sector = 1/2 × arc length × radius",
+          "marks": 1
+        },
+        {
+          "step": "= 1/2 × 33 × 21 = 346.5 cm²",
+          "marks": 1
+        }
+      ],
+      "solution": "Area = lr/2 = (33 × 21)/2 = 346.5 cm²."
+    },
+    {
+      "number": 25,
+      "section": "B",
+      "chapter": "Probability",
+      "topic": "Two dice: prime sum",
+      "marks": 2,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "Two dice are thrown at the same time. Find the probability that the sum of the numbers appearing on them is a prime number.",
+      "markingScheme": [
+        {
+          "step": "Favourable outcomes: sums 2, 3, 5, 7, 11 occur 1 + 2 + 4 + 6 + 2 = 15 times",
+          "marks": 1
+        },
+        {
+          "step": "P = 15/36 = 5/12",
+          "marks": 1
+        }
+      ],
+      "solution": "Sum 2: 1 way, 3: 2, 5: 4, 7: 6, 11: 2, a total of 15 of 36 outcomes. P = 5/12."
+    },
+    {
+      "number": 26,
+      "section": "C",
+      "chapter": "Real Numbers",
+      "topic": "Proving irrationality",
+      "marks": 3,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "Given that √2 is an irrational number, prove that (5 – 3√2) is an irrational number.",
+      "markingScheme": [
+        {
+          "step": "Assume 5 − 3√2 = r, a rational number",
+          "marks": 1
+        },
+        {
+          "step": "Then √2 = (5 − r)/3, which is rational",
+          "marks": 1
+        },
+        {
+          "step": "Contradiction, so 5 − 3√2 is irrational",
+          "marks": 1
+        }
+      ],
+      "solution": "If 5 − 3√2 = r (rational), then √2 = (5 − r)/3 would be rational, contradicting that √2 is irrational. Hence 5 − 3√2 is irrational."
+    },
+    {
+      "number": 27,
+      "section": "C",
+      "chapter": "Polynomials",
+      "topic": "Symmetric functions of zeroes",
+      "marks": 3,
+      "type": "short",
+      "difficulty": "hard",
+      "text": "If α and β are the zeroes of the quadratic polynomial x² – 7x + 10, then find the value of (α²)/(β) + (β²)/(α).",
+      "markingScheme": [
+        {
+          "step": "α + β = 7 and αβ = 10",
+          "marks": 1
+        },
+        {
+          "step": "(α²)/(β) + (β²)/(α) = (α³ + β³)/(αβ) = ((α + β)³ − 3αβ(α + β))/(αβ)",
+          "marks": 1
+        },
+        {
+          "step": "= (343 − 210)/10 = 133/10",
+          "marks": 1
+        }
+      ],
+      "solution": "α³ + β³ = 7³ − 3 × 10 × 7 = 133, so the value = 133/10 = 13.3. (Zeroes 2 and 5: 4/5 + 25/2 = 13.3.)"
+    },
+    {
+      "number": 28,
+      "section": "C",
+      "chapter": "Arithmetic Progressions",
+      "topic": "Sum of n terms",
+      "marks": 3,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "A sum of ₹ 700 is to be used to give seven cash prizes to students of a school for their overall academic performance. If each prize is ₹ 20 less than its preceding prize, find the value of each of the prizes.",
+      "markingScheme": [
+        {
+          "step": "S₇ = 7/2[2a + 6(– 20)] = 700",
+          "marks": 1
+        },
+        {
+          "step": "2a − 120 = 200, so a = 160",
+          "marks": 1
+        },
+        {
+          "step": "Prizes: ₹ 160, 140, 120, 100, 80, 60, 40",
+          "marks": 1
+        }
+      ],
+      "solution": "7/2(2a − 120) = 700 gives a = 160. The prizes are ₹ 160, ₹ 140, ₹ 120, ₹ 100, ₹ 80, ₹ 60 and ₹ 40.",
+      "or": {
+        "text": "Find the sum of all three-digit natural numbers which are multiples of 7.",
+        "markingScheme": [
+          {
+            "step": "A.P. 105, 112, …, 994 with d = 7",
+            "marks": 1
+          },
+          {
+            "step": "n = (994 − 105)/7 + 1 = 128",
+            "marks": 1
+          },
+          {
+            "step": "Sum = 128/2(105 + 994) = 70336",
+            "marks": 1
+          }
+        ],
+        "solution": "n = 128 terms; S = 64 × 1099 = 70336."
+      }
+    },
+    {
+      "number": 29,
+      "section": "C",
+      "chapter": "Circles",
+      "topic": "Tangents at the ends of a diameter",
+      "marks": 3,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "Prove that the tangents drawn at the ends of a diameter of a circle are parallel.",
+      "markingScheme": [
+        {
+          "step": "Figure: diameter AB, tangents PQ at A and RS at B",
+          "marks": 1
+        },
+        {
+          "step": "OA ⟂ PQ and OB ⟂ RS (tangent ⟂ radius), so ∠OAQ = ∠OBR = 90°",
+          "marks": 1
+        },
+        {
+          "step": "These are alternate angles with transversal AB, so PQ ∥ RS",
+          "marks": 1
+        }
+      ],
+      "solution": "The radius is perpendicular to the tangent at the point of contact, so ∠PAB = ∠ABS = 90°. These are equal alternate angles made by the transversal AB, hence the tangents are parallel."
+    },
+    {
+      "number": 30,
+      "section": "C",
+      "chapter": "Coordinate Geometry",
+      "topic": "Section formula: ratio",
+      "marks": 3,
+      "type": "short",
+      "difficulty": "medium",
+      "text": "Find the ratio in which the point P (– 4, 6) divides the line segment joining the points A (– 6, 10) and B (3, – 8). Also verify your answer using the y-coordinate of P.",
+      "markingScheme": [
+        {
+          "step": "Let the ratio be k : 1; x = (3k − 6)/(k + 1) = – 4",
+          "marks": 1
+        },
+        {
+          "step": "7k = 2, so the ratio is 2 : 7",
+          "marks": 1
+        },
+        {
+          "step": "Verify: y = (2(– 8) + 7(10))/9 = 6",
+          "marks": 1
+        }
+      ],
+      "solution": "(3k − 6)/(k + 1) = – 4 gives k = 2/7, a ratio of 2 : 7. y = (– 16 + 70)/9 = 6, which matches."
+    },
+    {
+      "number": 31,
+      "section": "C",
+      "chapter": "Introduction to Trigonometry",
+      "topic": "Proving identities",
+      "marks": 3,
+      "type": "short",
+      "difficulty": "hard",
+      "text": "Prove that: (1 + cot A – cosec A) (1 + tan A + sec A) = 2.",
+      "markingScheme": [
+        {
+          "step": "Write in sin and cos: (sin A + cos A − 1)/(sin A) × (cos A + sin A + 1)/(cos A)",
+          "marks": 1
+        },
+        {
+          "step": "= ((sin A + cos A)² − 1)/(sin A cos A)",
+          "marks": 1
+        },
+        {
+          "step": "= (2 sin A cos A)/(sin A cos A) = 2",
+          "marks": 1
+        }
+      ],
+      "solution": "LHS = ((sin A + cos A − 1)(sin A + cos A + 1))/(sin A cos A) = (1 + 2 sin A cos A − 1)/(sin A cos A) = 2.",
+      "or": {
+        "text": "If sec θ + tan θ = p, then prove that sin θ = (p² − 1)/(p² + 1).",
+        "markingScheme": [
+          {
+            "step": "p² = ((1 + sin θ)²)/(cos² θ) = (1 + sin θ)/(1 − sin θ)",
+            "marks": 1
+          },
+          {
+            "step": "Apply componendo-dividendo, or substitute into (p² − 1)/(p² + 1)",
+            "marks": 1
+          },
+          {
+            "step": "Simplify to sin θ",
+            "marks": 1
+          }
+        ],
+        "solution": "p² = ((1 + sin θ)²)/(1 − sin² θ) = (1 + sin θ)/(1 − sin θ). Then (p² − 1)/(p² + 1) = (2 sin θ)/2 = sin θ."
+      }
+    },
+    {
+      "number": 32,
+      "section": "D",
+      "chapter": "Quadratic Equations",
+      "topic": "Upstream and downstream",
+      "marks": 5,
+      "type": "long",
+      "difficulty": "hard",
+      "text": "A motorboat whose speed in still water is 18 km/h takes 1 hour more to go 24 km upstream than to return downstream to the same spot. Find the speed of the stream.",
+      "markingScheme": [
+        {
+          "step": "Let the speed of the stream be x km/h; upstream 18 − x, downstream 18 + x",
+          "marks": 1
+        },
+        {
+          "step": "24/(18 − x) − 24/(18 + x) = 1",
+          "marks": 1
+        },
+        {
+          "step": "x² + 48x − 324 = 0",
+          "marks": 1
+        },
+        {
+          "step": "(x + 54)(x − 6) = 0",
+          "marks": 1
+        },
+        {
+          "step": "Speed of the stream = 6 km/h (x = – 54 rejected)",
+          "marks": 1
+        }
+      ],
+      "solution": "24(18 + x) − 24(18 − x) = 324 − x² gives x² + 48x − 324 = 0, so x = 6 km/h."
+    },
+    {
+      "number": 33,
+      "section": "D",
+      "chapter": "Triangles",
+      "topic": "BPT: proof and application",
+      "marks": 5,
+      "type": "long",
+      "difficulty": "hard",
+      "text": "Prove that if a line is drawn parallel to one side of a triangle to intersect the other two sides in distinct points, the other two sides are divided in the same ratio.\nUsing the above theorem solve the following:\nIn ΔABC, DE ∥ BC with D on AB and E on AC. If AD = x, DB = x – 2, AE = x + 2 and EC = x – 1, find the value of x.",
+      "markingScheme": [
+        {
+          "step": "Given, to prove, construction and figure",
+          "marks": 1
+        },
+        {
+          "step": "(ar(ADE))/(ar(BDE)) = AD/DB and (ar(ADE))/(ar(DEC)) = AE/EC",
+          "marks": 1
+        },
+        {
+          "step": "ar(BDE) = ar(DEC), so AD/DB = AE/EC",
+          "marks": 1
+        },
+        {
+          "step": "x/(x − 2) = (x + 2)/(x − 1)",
+          "marks": 1
+        },
+        {
+          "step": "x² − x = x² − 4, so x = 4",
+          "marks": 1
+        }
+      ],
+      "solution": "Proof by the ratio of areas (triangles BDE and DEC lie on the same base DE between the same parallels). Then x(x − 1) = (x + 2)(x − 2) gives x = 4."
+    },
+    {
+      "number": 34,
+      "section": "D",
+      "chapter": "Surface Areas and Volumes",
+      "topic": "Combination of solids: tent",
+      "marks": 5,
+      "type": "long",
+      "difficulty": "hard",
+      "text": "A tent is in the shape of a cylinder surmounted by a conical top. If the height and diameter of the cylindrical part are 2.1 m and 4 m respectively, and the slant height of the top is 2.8 m, find the area of the canvas used for making the tent. Also, find the cost of the canvas of the tent at the rate of ₹ 500 per m². (Note that the base of the tent will not be covered with canvas.)",
+      "markingScheme": [
+        {
+          "step": "Curved surface area of the cylinder = 2πrh = 2 × 22/7 × 2 × 2.1 = 26.4 m²",
+          "marks": 2
+        },
+        {
+          "step": "Curved surface area of the cone = πrl = 22/7 × 2 × 2.8 = 17.6 m²",
+          "marks": 1
+        },
+        {
+          "step": "Canvas = 26.4 + 17.6 = 44 m²",
+          "marks": 1
+        },
+        {
+          "step": "Cost = 44 × 500 = ₹ 22000",
+          "marks": 1
+        }
+      ],
+      "solution": "Canvas = 26.4 + 17.6 = 44 m². Cost = ₹ 22,000.",
+      "or": {
+        "text": "A wooden article was made by scooping out a hemisphere from each end of a solid cylinder. If the height of the cylinder is 10 cm and its base is of radius 3.5 cm, find the total surface area of the article.",
+        "markingScheme": [
+          {
+            "step": "Curved surface area of the cylinder = 2πrh = 2 × 22/7 × 3.5 × 10 = 220 cm²",
+            "marks": 2
+          },
+          {
+            "step": "Two hemispherical surfaces = 2 × 2πr² = 4 × 22/7 × 3.5 × 3.5 = 154 cm²",
+            "marks": 2
+          },
+          {
+            "step": "Total surface area = 374 cm²",
+            "marks": 1
+          }
+        ],
+        "solution": "TSA = 220 + 154 = 374 cm²."
+      }
+    },
+    {
+      "number": 35,
+      "section": "D",
+      "chapter": "Some Applications of Trigonometry",
+      "topic": "Elevation of a tower on a building",
+      "marks": 5,
+      "type": "long",
+      "difficulty": "hard",
+      "text": "From a point on the ground, the angles of elevation of the bottom and the top of a transmission tower fixed at the top of a 20 m high building are 45° and 60° respectively. Find the height of the tower. (Use √3 = 1.73)",
+      "markingScheme": [
+        {
+          "step": "Correct figure",
+          "marks": 1
+        },
+        {
+          "step": "tan 45° = 20/x, so the distance x = 20 m",
+          "marks": 1
+        },
+        {
+          "step": "tan 60° = (20 + h)/20",
+          "marks": 1
+        },
+        {
+          "step": "h = 20(√3 − 1)",
+          "marks": 1
+        },
+        {
+          "step": "h = 14.6 m",
+          "marks": 1
+        }
+      ],
+      "solution": "x = 20 m; 20 + h = 20√3, so h = 20(√3 − 1) = 20 × 0.73 = 14.6 m.",
+      "or": {
+        "text": "As observed from the top of a 75 m high lighthouse from the sea-level, the angles of depression of two ships are 30° and 45°. If one ship is exactly behind the other on the same side of the lighthouse, find the distance between the two ships. (Use √3 = 1.73)",
+        "markingScheme": [
+          {
+            "step": "Correct figure",
+            "marks": 1
+          },
+          {
+            "step": "tan 45° = 75/x, so x = 75 m",
+            "marks": 1
+          },
+          {
+            "step": "tan 30° = 75/(x + d), so x + d = 75√3",
+            "marks": 1
+          },
+          {
+            "step": "d = 75(√3 − 1)",
+            "marks": 1
+          },
+          {
+            "step": "d = 54.75 m",
+            "marks": 1
+          }
+        ],
+        "solution": "Distance = 75√3 − 75 = 75(√3 − 1) = 75 × 0.73 = 54.75 m."
+      }
+    },
+    {
+      "number": 36,
+      "section": "E",
+      "chapter": "Pair of Linear Equations in Two Variables",
+      "topic": "Case study: canteen prices",
+      "marks": 4,
+      "type": "case",
+      "difficulty": "medium",
+      "text": "A school canteen sells sandwiches and fruit juice. On Monday, the canteen sold 40 sandwiches and 30 glasses of juice and collected ₹ 2,700. On Tuesday, the price of each item was increased by ₹ 5 and the canteen sold 50 sandwiches and 20 glasses of juice, collecting ₹ 2,850. Let the price of a sandwich and a glass of juice on Monday be ₹ x and ₹ y respectively.\n(i) Form a linear equation in two variables representing the sale on Monday. [1]\n(ii) Form a linear equation in two variables representing the sale on Tuesday. [1]\n(iii) (A) Find the price of a sandwich and a glass of juice on Monday. [2]",
+      "markingScheme": [
+        {
+          "step": "(i) 40x + 30y = 2700, i.e. 4x + 3y = 270",
+          "marks": 1
+        },
+        {
+          "step": "(ii) 50(x + 5) + 20(y + 5) = 2850, i.e. 5x + 2y = 250",
+          "marks": 1
+        },
+        {
+          "step": "(iii) (A) Solve 4x + 3y = 270 and 5x + 2y = 250",
+          "marks": 1
+        },
+        {
+          "step": "(iii) (A) x = ₹ 30, y = ₹ 50",
+          "marks": 1
+        }
+      ],
+      "solution": "(i) 4x + 3y = 270. (ii) 5x + 2y = 250. (iii)(A) Eliminating y: 7x = 210, x = 30, y = 50. (iii)(B) ₹ 35 and ₹ 55.",
+      "or": {
+        "text": "A school canteen sells sandwiches and fruit juice. On Monday, the canteen sold 40 sandwiches and 30 glasses of juice and collected ₹ 2,700. On Tuesday, the price of each item was increased by ₹ 5 and the canteen sold 50 sandwiches and 20 glasses of juice, collecting ₹ 2,850. Let the price of a sandwich and a glass of juice on Monday be ₹ x and ₹ y respectively.\n(i) Form a linear equation in two variables representing the sale on Monday. [1]\n(ii) Form a linear equation in two variables representing the sale on Tuesday. [1]\n(iii) (B) Find the price of a sandwich and a glass of juice on Tuesday. [2]",
+        "markingScheme": [
+          {
+            "step": "(i) 40x + 30y = 2700, i.e. 4x + 3y = 270",
+            "marks": 1
+          },
+          {
+            "step": "(ii) 50(x + 5) + 20(y + 5) = 2850, i.e. 5x + 2y = 250",
+            "marks": 1
+          },
+          {
+            "step": "(iii) (B) Monday's prices x = 30, y = 50",
+            "marks": 1
+          },
+          {
+            "step": "(iii) (B) Tuesday: sandwich ₹ 35, juice ₹ 55",
+            "marks": 1
+          }
+        ],
+        "solution": "(i) 4x + 3y = 270. (ii) 5x + 2y = 250. (iii)(A) Eliminating y: 7x = 210, x = 30, y = 50. (iii)(B) ₹ 35 and ₹ 55."
+      }
+    },
+    {
+      "number": 37,
+      "section": "E",
+      "chapter": "Circles",
+      "topic": "Case study: tangents to a flower bed",
+      "marks": 4,
+      "type": "case",
+      "difficulty": "medium",
+      "text": "In a school garden, a circular flower bed with centre O has a radius of 5 m. Riya stands at a point P outside the flower bed, 13 m away from the centre O, and two straight paths PA and PB from P touch the flower bed at the points A and B.\n(i) What is the measure of ∠OAP? [1]\n(ii) Find the length of the path PA. [1]\n(iii) (A) Find the area of the quadrilateral OAPB. [2]",
+      "markingScheme": [
+        {
+          "step": "(i) ∠OAP = 90° (tangent ⟂ radius)",
+          "marks": 1
+        },
+        {
+          "step": "(ii) PA = √(13² − 5²) = 12 m",
+          "marks": 1
+        },
+        {
+          "step": "(iii) (A) ar(OAPB) = 2 × ar(ΔOAP)",
+          "marks": 1
+        },
+        {
+          "step": "(iii) (A) = 2 × 1/2 × 5 × 12 = 60 m²",
+          "marks": 1
+        }
+      ],
+      "solution": "(i) 90°. (ii) 12 m. (iii)(A) 60 m². (iii)(B) 5√3 m.",
+      "or": {
+        "text": "In a school garden, a circular flower bed with centre O has a radius of 5 m. Riya stands at a point P outside the flower bed, 13 m away from the centre O, and two straight paths PA and PB from P touch the flower bed at the points A and B.\n(i) What is the measure of ∠OAP? [1]\n(ii) Find the length of the path PA. [1]\n(iii) (B) If the paths PA and PB were inclined to each other at an angle of 60°, then what would be the length of each path? [2]",
+        "markingScheme": [
+          {
+            "step": "(i) ∠OAP = 90° (tangent ⟂ radius)",
+            "marks": 1
+          },
+          {
+            "step": "(ii) PA = √(13² − 5²) = 12 m",
+            "marks": 1
+          },
+          {
+            "step": "(iii) (B) ∠APO = 30°",
+            "marks": 1
+          },
+          {
+            "step": "(iii) (B) PA = OA/(tan 30°) = 5√3 m",
+            "marks": 1
+          }
+        ],
+        "solution": "(i) 90°. (ii) 12 m. (iii)(A) 60 m². (iii)(B) 5√3 m."
+      }
+    },
+    {
+      "number": 38,
+      "section": "E",
+      "chapter": "Statistics",
+      "topic": "Case study: daily wages",
+      "marks": 4,
+      "type": "case",
+      "difficulty": "hard",
+      "text": "A construction company recorded the daily wages of 50 workers at one of its sites. The data is given below:\nDaily wages (in ₹) | 100 – 150 | 150 – 200 | 200 – 250 | 250 – 300 | 300 – 350\nNumber of workers | 6 | 9 | 15 | 12 | 8\nThe site manager used the measures of central tendency to understand the wage pattern before revising the pay scale.\n(i) Identify the modal class. [1]\n(ii) Find the class interval containing the median. [1]\n(iii) (A) Find the mean daily wage of the workers. [2]",
+      "markingScheme": [
+        {
+          "step": "(i) Modal class 200 – 250",
+          "marks": 1
+        },
+        {
+          "step": "(ii) N/2 = 25; cumulative frequencies 6, 15, 30, so the median class is 200 – 250",
+          "marks": 1
+        },
+        {
+          "step": "(iii) (A) Σfᵢxᵢ = 750 + 1575 + 3375 + 3300 + 2600 = 11600",
+          "marks": 1
+        },
+        {
+          "step": "(iii) (A) Mean = 11600/50 = ₹ 232",
+          "marks": 1
+        }
+      ],
+      "solution": "(i) 200 – 250. (ii) 200 – 250. (iii)(A) ₹ 232. (iii)(B) ₹ 233.33.",
+      "or": {
+        "text": "A construction company recorded the daily wages of 50 workers at one of its sites. The data is given below:\nDaily wages (in ₹) | 100 – 150 | 150 – 200 | 200 – 250 | 250 – 300 | 300 – 350\nNumber of workers | 6 | 9 | 15 | 12 | 8\nThe site manager used the measures of central tendency to understand the wage pattern before revising the pay scale.\n(i) Identify the modal class. [1]\n(ii) Find the class interval containing the median. [1]\n(iii) (B) Find the mode of the data. [2]",
+        "markingScheme": [
+          {
+            "step": "(i) Modal class 200 – 250",
+            "marks": 1
+          },
+          {
+            "step": "(ii) N/2 = 25; cumulative frequencies 6, 15, 30, so the median class is 200 – 250",
+            "marks": 1
+          },
+          {
+            "step": "(iii) (B) Mode = l + (f₁ − f₀)/(2f₁ − f₀ − f₂) × h with l = 200, f₁ = 15, f₀ = 9, f₂ = 12, h = 50",
+            "marks": 1
+          },
+          {
+            "step": "(iii) (B) = 200 + 6/9 × 50 = ₹ 233.33",
+            "marks": 1
+          }
+        ],
+        "solution": "(i) 200 – 250. (ii) 200 – 250. (iii)(A) ₹ 232. (iii)(B) ₹ 233.33."
+      }
+    }
+  ]
+}

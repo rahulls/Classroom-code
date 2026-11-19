@@ -10,6 +10,9 @@ export type ReviewItem = {
   chapter: string;
   max: number;
   scheme: { step: string; marks: number }[];
+  /** Internal choice (B): the student answers either this or the main question */
+  orText?: string | null;
+  orScheme?: { step: string; marks: number }[] | null;
   marks: number;
   aiProposed: number | null;
   aiConfidence: number | null;
@@ -85,7 +88,17 @@ export function ReviewPanel({ sheetUrl, items, student }: { sheetUrl: string; it
             <p>
               <b>Q{cur.number}.</b> {cur.text}
             </p>
-            <p className="text-xs text-muted">Scheme: {cur.scheme.map((s) => `${s.step} [${s.marks}]`).join("; ") || "MCQ (auto)"}</p>
+            <p className="text-xs text-muted">
+              {cur.orText ? "(A) scheme: " : "Scheme: "}
+              {cur.scheme.map((s) => `${s.step} [${s.marks}]`).join("; ") || "MCQ (auto)"}
+            </p>
+            {cur.orText && (
+              <div className="rounded border border-line p-2 text-xs">
+                <b>OR (B):</b> {cur.orText}
+                <p className="mt-1 text-muted">(B) scheme: {(cur.orScheme ?? []).map((s) => `${s.step} [${s.marks}]`).join("; ")}</p>
+                <p className="mt-1 text-warn">Mark whichever alternative the student attempted, by its own scheme.</p>
+              </div>
+            )}
             {cur.aiProposed != null && (
               <p className="rounded bg-soft/60 p-2 text-xs">
                 AI proposal: <b>{cur.aiProposed}</b>/{cur.max} · confidence {Math.round((cur.aiConfidence ?? 0) * 100)}% · {cur.aiReasoning}

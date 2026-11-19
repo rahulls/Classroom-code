@@ -29,6 +29,14 @@ export const QuestionInput = z.object({
     .or(z.literal("")),
   markingScheme: z.array(z.object({ step: z.string().trim().min(1), marks: z.coerce.number().min(0) })).default([]),
   solution: z.string().trim().max(6000).optional(),
+  /** CBSE internal choice: the alternative (B) question, with its own marking scheme (same marks) */
+  or: z
+    .object({
+      text: z.string().trim().min(3).max(4000),
+      markingScheme: z.array(z.object({ step: z.string().trim().min(1), marks: z.coerce.number().min(0) })).default([]),
+      solution: z.string().trim().max(6000).optional(),
+    })
+    .optional(),
 });
 export type QuestionIn = z.infer<typeof QuestionInput>;
 
@@ -101,6 +109,11 @@ function checkQuestion(q: QuestionIn) {
     const sum = q.markingScheme.reduce((a, s) => a + s.marks, 0);
     if (Math.abs(sum - q.marks) > 1e-9) throw new EpError(`The marking scheme adds up to ${sum}, but the question is worth ${q.marks}.`);
   }
+  if (q.or) {
+    if (q.type === "mcq") throw new EpError("Internal choice (OR) is for written questions, not MCQs.");
+    const sum = q.or.markingScheme.reduce((a, s) => a + s.marks, 0);
+    if (!q.or.markingScheme.length || Math.abs(sum - q.marks) > 1e-9) throw new EpError(`The OR question's marking scheme adds up to ${sum}, but the question is worth ${q.marks}.`);
+  }
 }
 
 /** Adds a new question to the bank and to the paper. */
@@ -127,6 +140,9 @@ export async function addQuestion(paperId: string, sectionId: string, input: Que
         correctOption: q.type === "mcq" ? q.correctOption || null : null,
         markingScheme: q.type === "mcq" ? undefined : q.markingScheme,
         solution: q.solution,
+        orText: q.or?.text,
+        orMarkingScheme: q.or ? q.or.markingScheme : undefined,
+        orSolution: q.or?.solution,
       },
     });
     await tx.paperQuestion.create({ data: { paperId, sectionId, questionId: row.id, number } });
@@ -252,6 +268,9 @@ export async function clonePaperToBoard(id: string, board: string) {
         correctOption: q.correctOption,
         markingScheme: q.markingScheme ?? undefined,
         solution: q.solution,
+        orText: q.orText,
+        orMarkingScheme: q.orMarkingScheme ?? undefined,
+        orSolution: q.orSolution,
       },
     });
     await epdb.paperQuestion.create({ data: { paperId: np.id, sectionId: target.id, questionId: nq.id, number: it.number } });
@@ -280,6 +299,7 @@ export async function exportQuestions(paperId: string) {
       correctOption: i.question.correctOption,
       markingScheme: i.question.markingScheme,
       solution: i.question.solution,
+      ...(i.question.orText ? { or: { text: i.question.orText, markingScheme: i.question.orMarkingScheme, solution: i.question.orSolution } } : {}),
     })),
   };
 }
@@ -371,7 +391,15 @@ ${mode === "paper" ? `<p class="muted">Write your student code, class and paper 
               : mode === "solutions"
                 ? `<div><b>Solution:</b> ${esc(q.solution || (q.type === "mcq" ? `Answer ${q.correctOption}` : "See the marking scheme."))}</div>`
                 : "";
-          return `<div class="q"><b>${i.number}.</b> ${esc(q.text)} <span class="muted">[${q.marks}]</span>${opts}${ans}</div>`;
+          // Internal choice: the (B) alternative after "OR", with its own scheme or solution
+          const orAns =
+            mode === "key"
+              ? `<div><b>Marking scheme:</b> ${((q.orMarkingScheme as { step: string; marks: number }[]) ?? []).map((st) => `${esc(st.step)} [${st.marks}]`).join("; ")}</div>`
+              : mode === "solutions"
+                ? `<div><b>Solution:</b> ${esc(q.orSolution || "See the marking scheme.")}</div>`
+                : "";
+          const alt = q.orText ? `<div style="text-align:center;font-weight:bold">OR</div><div><b>${i.number} (B).</b> ${esc(q.orText).replace(/\n/g, "<br>")}${orAns}</div>` : "";
+          return `<div class="q"><b>${i.number}${q.orText ? " (A)" : ""}.</b> ${esc(q.text).replace(/\n/g, "<br>")} <span class="muted">[${q.marks}]</span>${opts}${ans}${alt}</div>`;
         })
         .join("");
       return `<h2>Section ${esc(sec.name)}</h2>${qs}`;

@@ -149,6 +149,12 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
                         {i.question.chapter} · {i.question.topic} · {i.question.difficulty} · {i.question.marks} mark{i.question.marks === 1 ? "" : "s"}
                         {i.question.type === "mcq" ? ` · answer ${i.question.correctOption}` : ` · scheme: ${((i.question.markingScheme as { step: string; marks: number }[]) ?? []).map((s) => `${s.step} [${s.marks}]`).join("; ")}`}
                       </span>
+                      {i.question.orText && (
+                        <span className="mt-1 block border-l-2 border-accent/40 pl-2">
+                          <b className="text-xs">OR (B)</b> {i.question.orText}
+                          <span className="block text-xs text-muted">scheme: {((i.question.orMarkingScheme as { step: string; marks: number }[]) ?? []).map((s) => `${s.step} [${s.marks}]`).join("; ")}</span>
+                        </span>
+                      )}
                     </span>
                     {draft && (
                       <ActionButton action={removeQuestionAction} fields={{ paperId: p.id, pqId: i.id }} tone="danger">

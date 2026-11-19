@@ -37,6 +37,8 @@ export default async function MarkingPage({ params, searchParams }: { params: Pr
             chapter: it.question.chapter,
             max: it.question.marks,
             scheme: (it.question.markingScheme as { step: string; marks: number }[]) ?? [],
+            orText: it.question.orText,
+            orScheme: (it.question.orMarkingScheme as { step: string; marks: number }[] | null) ?? null,
             marks: m.marksAwarded,
             aiProposed: m.aiProposed,
             aiConfidence: m.aiConfidence,
