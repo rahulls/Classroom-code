@@ -37,9 +37,12 @@ export default async function PapersPage() {
                   </Link>
                 </td>
                 <td>{p.title}</td>
-                <td>{p.isDiagnostic ? "diagnostic" : p.kind}</td>
+                <td>
+                  {p.isDiagnostic ? "diagnostic" : p.kind}
+                  {p.uploadOnly && <span className="ml-1 rounded bg-soft px-1 text-[10px]">uploaded file</span>}
+                </td>
                 <td>{p.status}</td>
-                <td className="text-right">{p._count.items}</td>
+                <td className="text-right">{p.uploadOnly ? "-" : p._count.items}</td>
                 <td className="text-right">{p._count.submissions}</td>
                 <td className="text-xs">{p.dueAt?.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) ?? "-"}</td>
               </tr>
@@ -57,7 +60,7 @@ export default async function PapersPage() {
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="card space-y-3">
           <h2 className="font-semibold text-[#0f3460]">New paper</h2>
-          <p className="text-xs text-muted">Paper 0 is the diagnostic. The sections come from the board's pattern template (Settings → Papers).</p>
+          <p className="text-xs text-muted">Upload the paper you made (PDF or CSV), or build it question by question (needed for AI marking, chapter analytics and reports). Paper 0 is the diagnostic.</p>
           <EpForm action={createPaperAction} className="grid gap-2 sm:grid-cols-3">
             <div className="sm:col-span-3">
               <Msg />
@@ -97,6 +100,18 @@ export default async function PapersPage() {
             </Field>
             <Field label="Title">
               <input name="title" className="input sm:col-span-2" placeholder="Paper 1" />
+            </Field>
+            <Field label="How you'll make it" req>
+              <select name="mode" className="input">
+                <option value="upload">Upload my own file (PDF or CSV)</option>
+                <option value="questions">Build question by question</option>
+              </select>
+            </Field>
+            <Field label="Total marks" hint="For an uploaded paper">
+              <input name="totalMarks" type="number" min={1} step={0.5} className="input" />
+            </Field>
+            <Field label="Paper file" hint="PDF or CSV (you can add it later too)">
+              <input name="file" type="file" accept=".pdf,.csv" className="input" />
             </Field>
             <div className="self-end">
               <Submit>Create</Submit>

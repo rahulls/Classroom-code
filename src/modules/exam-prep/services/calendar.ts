@@ -134,7 +134,7 @@ export async function weeklyTasks(now = new Date()) {
       continue;
     }
     const tag = groupTag({ klass: sl.klass, board: sl.board, subject: sl.subject, number: paper.number });
-    const vars = { tag, title: paper.title, class: `Class ${sl.klass}`, board: sl.board, subject: sl.subject, marks: paper.items.reduce((a, i) => a + i.question.marks, 0), deadline: when(paper.dueAt), formLink: s["brand.formLinks"][String(sl.klass)] ?? "" };
+    const vars = { tag, title: paper.title, class: `Class ${sl.klass}`, board: sl.board, subject: sl.subject, marks: paper.uploadOnly ? (paper.totalMarks ?? "") : paper.items.reduce((a, i) => a + i.question.marks, 0), deadline: when(paper.dueAt), formLink: s["brand.formLinks"][String(sl.klass)] ?? "" };
     const post = await draft({ dedupeKey: `post:${paper.baseId}`, templateKey: "paper_post", audience: "group", tags: [tag], paperId: paper.id, body: await renderTemplate("paper_post", vars) });
     await task({ dedupeKey: `${k}:post`, week, kind: "post", title: `${label}: post ${paper.id} in the group${paper.status === "draft" ? " (publish it first)" : ""}`, dueAt: at(t.post), paperId: paper.id, messageId: post?.id });
     const rem = await draft({ dedupeKey: `wed:${paper.baseId}`, templateKey: "wed_reminder", audience: "group", tags: [tag], paperId: paper.id, body: await renderTemplate("wed_reminder", vars) });
@@ -167,4 +167,28 @@ export async function tracker(paperId: string) {
   const byStudent = new Map(subs.map((x) => [x.studentId, x]));
   const reminded = new Set(reminders.map((m) => m.studentId));
   return r.map((st) => ({ student: st, submission: byStudent.get(st.id) ?? null, reminded: reminded.has(st.id) }));
+}
+
+/**
+ * Drafts a paper's tagged group post and key post now (from the paper page), without waiting for the
+ * weekly job. Same dedupe keys as the job, so each post is drafted once.
+ */
+export async function draftPaperPosts(paperId: string) {
+  const s = await getSettings();
+  const paper = await epdb.paper.findUniqueOrThrow({ where: { id: paperId }, include: { items: { include: { question: true } } } });
+  if (paper.status === "draft") throw new EpError("Publish the paper first.");
+  const tag = groupTag({ klass: paper.klass, board: paper.board, subject: paper.subject, number: paper.number });
+  const vars = {
+    tag,
+    title: paper.title,
+    class: `Class ${paper.klass}`,
+    board: paper.board,
+    subject: paper.subject,
+    marks: paper.uploadOnly ? (paper.totalMarks ?? "") : paper.items.reduce((a, i) => a + i.question.marks, 0),
+    deadline: when(paper.dueAt) || "the deadline",
+    formLink: s["brand.formLinks"][String(paper.klass)] ?? "",
+  };
+  const post = await draft({ dedupeKey: `post:${paper.baseId}`, templateKey: "paper_post", audience: "group", tags: [tag], paperId: paper.id, body: await renderTemplate("paper_post", vars) });
+  const key = await draft({ dedupeKey: `key:${paper.baseId}`, templateKey: "key_post", audience: "group", tags: [tag], paperId: paper.id, body: await renderTemplate("key_post", vars) });
+  return { post, key };
 }

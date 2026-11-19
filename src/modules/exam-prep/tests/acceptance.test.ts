@@ -442,3 +442,39 @@ describe("R12-R14 metrics, feedback, settings", () => {
     expect(await epdb.auditLog.count({ where: { action: "setting.changed", entityId: "cohort.minSize" } })).toBe(1);
   });
 });
+
+describe("Uploaded papers (the tutor's own PDF or CSV)", () => {
+  it("publishes without questions once the paper file is uploaded; keeps versions; drafts posts with the file", async () => {
+    const { addPaperFile, currentPaperFile, removePaperFile, shareableFile, csvPreview, paperFiles } = await import("../services/papers");
+    const { draftPaperPosts } = await import("../services/calendar");
+    await expect(createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 7, uploadOnly: true })).rejects.toThrow(/total marks/);
+    const p = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 7, uploadOnly: true, totalMarks: 40 });
+    await expect(publishPaper(p.id)).rejects.toThrow(/Upload the paper file/);
+    await expect(addPaperFile(p.id, "paper", { name: "paper.docx", bytes: new Uint8Array([1, 2, 3]) })).rejects.toThrow(/PDF or CSV/);
+    await expect(addPaperFile(p.id, "paper", { name: "broken.pdf", bytes: new Uint8Array([1, 2, 3]) })).rejects.toThrow(/can't be opened/);
+    const v1 = await addPaperFile(p.id, "paper", { name: "Paper 7.pdf", bytes: await fakeSheet(2) });
+    const v2 = await addPaperFile(p.id, "paper", { name: "Paper 7 fixed.pdf", bytes: await fakeSheet(3) });
+    expect((await currentPaperFile(p.id, "paper"))!.id).toBe(v2.id);
+    expect((await paperFiles(p.id)).filter((f) => f.kind === "paper")).toHaveLength(2);
+    const c = await publishPaper(p.id);
+    expect(c.total).toBe(40);
+    expect((await epdb.paper.findUniqueOrThrow({ where: { id: p.id } })).status).toBe("published");
+    // Removing the current version brings the earlier one back; the only file of a published paper can't go
+    await removePaperFile(v2.id);
+    expect((await currentPaperFile(p.id, "paper"))!.id).toBe(v1.id);
+    await expect(removePaperFile(v1.id)).rejects.toThrow(/only file/);
+    // CSV key with a preview
+    const key = await addPaperFile(p.id, "key", { name: "key.csv", bytes: new TextEncoder().encode("Q,Answer\n1,B\n2,D\n") });
+    expect(await csvPreview(key.path)).toEqual([["Q", "Answer"], ["1", "B"], ["2", "D"]]);
+    // Group posts: tagged, with the total marks, drafted once, with the files to attach
+    const a = await draftPaperPosts(p.id);
+    const b = await draftPaperPosts(p.id);
+    expect(a.post!.id).toBe(b.post!.id);
+    expect(a.post!.body.startsWith("[Class 10 | CBSE | Maths | Paper 7]")).toBe(true);
+    expect(a.post!.body).toContain("Total 40 marks");
+    expect((await shareableFile(p.id, "paper"))!.name).toBe("Paper 7.pdf");
+    expect((await shareableFile(p.id, "key"))!.name).toBe("key.csv");
+    expect(storage.exists(v1.path)).toBe(true);
+    expect(storage.exists(v2.path)).toBe(false);
+  });
+});

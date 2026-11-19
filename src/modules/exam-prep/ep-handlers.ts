@@ -6,13 +6,13 @@ import { epAction, EpError } from "./action";
 import { changePassword, confirmTwoStep, createAccount, hasAccount, signIn, signOut } from "./auth";
 import { epdb } from "./db";
 import { tick } from "./jobs";
-import { attachPaper, completeTask, draftPrivateReminder, generateCalendar } from "./services/calendar";
+import { attachPaper, completeTask, draftPaperPosts, draftPrivateReminder, generateCalendar } from "./services/calendar";
 import { addAttendee, addDoubt, answerDoubt, createSession, recordPayment, setAttendance, setOfferStatus, startPlan, suggestOffers } from "./services/commerce";
 import { markPaperMarked, proposeWithAi, recordSpotCheck, reviewMark, selectSpotCheck, setMark, enterSelfMarks } from "./services/marking";
 import { markMessageSent, validateTemplate } from "./services/messaging";
 import { logHours, recordFeedback } from "./services/metrics";
 import { addPendingStudent, addStudent, importIntakeCsv, markVerified, optOut, recordConsent, updateStudent, welcomeFor } from "./services/people";
-import { addQuestion, clonePaperToBoard, createPaper, importQuestions, makeChapterQuiz, newVersion, paperPdfs, publishPaper, removeQuestion, reuseQuestion, setChapterList } from "./services/papers";
+import { addPaperFile, addQuestion, clonePaperToBoard, createPaper, importQuestions, makeChapterQuiz, newVersion, PAPER_FILE_KINDS, paperPdfs, publishPaper, removePaperFile, removeQuestion, reuseQuestion, setChapterList, type PaperFileKind } from "./services/papers";
 import { applyRetention, deleteStudentData } from "./services/privacy";
 import { computeRanks, markTold } from "./services/ranking";
 import { approveReports, classNote, deliverReports, forceResend, generateReports, markReportSent, regenerateReport } from "./services/reports";
@@ -155,9 +155,39 @@ export const deleteStudentAction = epAction(z.object({ id, confirm: z.literal("D
 
 // ------------------------------ papers (R2) ------------------------------
 
-export const createPaperAction = epAction(z.object({ klass: num(9, 12), subject: z.string(), board: z.string(), number: num(0, 99), title: z.string().optional(), kind: z.enum(["paper", "mock"]).default("paper"), mockMinutes: z.coerce.number().optional() }), async (v) => {
-  const p = await createPaper({ ...v, title: v.title || undefined, mockMinutes: v.mockMinutes || undefined });
-  redirect(`/exam-prep/papers/${p.id}`);
+export const createPaperAction = epAction(
+  z.object({
+    klass: num(9, 12),
+    subject: z.string(),
+    board: z.string(),
+    number: num(0, 99),
+    title: z.string().optional(),
+    kind: z.enum(["paper", "mock"]).default("paper"),
+    mockMinutes: z.coerce.number().optional(),
+    mode: z.enum(["upload", "questions"]).default("upload"),
+    totalMarks: z.coerce.number().optional(),
+    file: file.optional(),
+  }),
+  async (v) => {
+    const p = await createPaper({ ...v, title: v.title || undefined, mockMinutes: v.mockMinutes || undefined, uploadOnly: v.mode === "upload", totalMarks: v.totalMarks || undefined });
+    if (v.mode === "upload" && v.file) await addPaperFile(p.id, "paper", await bytes(v.file));
+    redirect(`/exam-prep/papers/${p.id}`);
+  },
+);
+
+export const paperFileAction = epAction(z.object({ paperId: id, kind: z.enum(Object.keys(PAPER_FILE_KINDS) as [PaperFileKind, ...PaperFileKind[]]), file }), async (v) => {
+  const f = await addPaperFile(v.paperId, v.kind, await bytes(v.file));
+  return done(`${PAPER_FILE_KINDS[v.kind]} uploaded: ${f.name}.`, `/exam-prep/papers/${v.paperId}`);
+});
+
+export const removePaperFileAction = epAction(z.object({ fileId: id, paperId: id }), async (v) => {
+  await removePaperFile(v.fileId);
+  return done("File removed.", `/exam-prep/papers/${v.paperId}`);
+});
+
+export const paperPostsAction = epAction(z.object({ paperId: id }), async (v) => {
+  await draftPaperPosts(v.paperId);
+  return done("Group post and key post drafted in Messages (with the files to attach).", "/exam-prep/messages");
 });
 
 export const addQuestionAction = epAction(

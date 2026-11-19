@@ -15,6 +15,7 @@ shown in IST.
 | ParentReply | Replies to reports | For the reply-rate metric |
 | ChapterList | Syllabus order per class, subject and board | Questions must use these chapter names |
 | Paper | A paper version | id `C10-MAT-P1-CBSE` (`-v2`...); baseId; status draft → published → (closed) → marked → reported; kind paper/mock/quiz; isDiagnostic (Paper 0); published papers never change, only get a new version |
+| PaperFile | The tutor's own files for a paper | kind paper/key/solutions/other; PDF or CSV; isCurrent (re-uploading keeps older versions). A Paper with `uploadOnly` + `totalMarks` is published from its file, without questions |
 | Section | Paper sections from the board pattern | name, type (mcq/short/long/case) |
 | Question | Question bank | chapter, topic, marks, type, difficulty, options and correctOption (MCQ), markingScheme `[{step, marks}]` adding up to the marks, solution |
 | PaperQuestion | A question placed on a paper | Lets questions be reused across papers |

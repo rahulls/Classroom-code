@@ -3,6 +3,14 @@
 Open **http://localhost:4310/exam-prep**. The **Today** screen lists this week's tasks with due times.
 Press **Run the weekly jobs now** if the laptop was off.
 
+## Papers you make yourself
+
+**Papers → New paper → "Upload my own file (PDF or CSV)"**: give the total marks and attach the file,
+then **Publish**. On the paper page, **Files** also holds the answer key and solutions. Uploading again
+keeps the older version. **Draft group posts** puts the tagged post and the key post in Messages, each
+with a **⬇ file** button to attach. AI marking, chapter analytics and automatic reports need a paper
+built question by question; uploaded papers keep the tracker and filed sheets.
+
 ## The week
 
 | When (IST) | Do |

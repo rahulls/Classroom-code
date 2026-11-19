@@ -70,6 +70,18 @@ export async function createPaperAction(prev: EpResult, fd: FormData): Promise<E
   return h.createPaperAction(prev, fd);
 }
 
+export async function paperFileAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.paperFileAction(prev, fd);
+}
+
+export async function removePaperFileAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.removePaperFileAction(prev, fd);
+}
+
+export async function paperPostsAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.paperPostsAction(prev, fd);
+}
+
 export async function addQuestionAction(prev: EpResult, fd: FormData): Promise<EpResult> {
   return h.addQuestionAction(prev, fd);
 }

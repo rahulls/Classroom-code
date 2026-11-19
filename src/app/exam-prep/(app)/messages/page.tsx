@@ -1,4 +1,6 @@
 import { messageSentAction } from "@/modules/exam-prep/actions";
+import { signedLink } from "@/modules/exam-prep/adapters/storage";
+import { shareableFile } from "@/modules/exam-prep/services/papers";
 import { epdb } from "@/modules/exam-prep/db";
 import { groupAdvice, renderTemplate, seedTemplates } from "@/modules/exam-prep/services/messaging";
 import { getSettings } from "@/modules/exam-prep/settings";
@@ -17,6 +19,13 @@ export default async function MessagesPage() {
     groupAdvice(),
     renderTemplate("group_rules", {}),
   ]);
+  // The file to attach to each paper or key post (the uploaded one, else the PDF made from the questions)
+  const attach = new Map<string, { path: string; name: string }>();
+  for (const d of drafts)
+    if (d.paperId && (d.templateKey === "paper_post" || d.templateKey === "key_post")) {
+      const f = await shareableFile(d.paperId, d.templateKey === "paper_post" ? "paper" : "key");
+      if (f) attach.set(d.id, f);
+    }
   const group = drafts.filter((d) => d.audience === "group");
   const priv = drafts.filter((d) => d.audience !== "group");
   const Row = ({ m }: { m: (typeof drafts)[number] }) => (
@@ -28,6 +37,12 @@ export default async function MessagesPage() {
       <pre className="flex-1 whitespace-pre-wrap font-sans text-sm">{m.body}</pre>
       <div className="flex flex-col gap-1">
         {m.audience === "group" ? <CopyAndOpenGroup text={m.body} groupLink={s["brand.groupLink"]} /> : <CopyButton text={m.body} />}
+        {attach.get(m.id) && (
+          <a href={`${signedLink(attach.get(m.id)!.path)}&download=1`} className="btn px-2 py-1 text-xs" title={`Attach ${attach.get(m.id)!.name} to this post`}>
+            ⬇ {m.templateKey === "key_post" ? "Key" : "Paper"} file
+          </a>
+        )}
+        {m.paperId && (m.templateKey === "paper_post" || m.templateKey === "key_post") && !attach.get(m.id) && <span className="text-[10px] text-warn">No {m.templateKey === "key_post" ? "key" : "paper"} file yet</span>}
         {m.waLink && (
           <a href={m.waLink} target="_blank" rel="noreferrer" className="btn px-2 py-1 text-xs">
             WhatsApp ↗

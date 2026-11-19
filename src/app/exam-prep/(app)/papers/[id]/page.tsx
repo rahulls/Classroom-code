@@ -9,6 +9,7 @@ import {
   importQuestionsAction,
   mcqImportAction,
   newVersionAction,
+  paperPostsAction,
   pdfsAction,
   publishAction,
   reminderAction,
@@ -22,6 +23,7 @@ import { classView } from "@/modules/exam-prep/services/analytics";
 import { tracker } from "@/modules/exam-prep/services/calendar";
 import { chapterList, paperCheck, paperWithQuestions } from "@/modules/exam-prep/services/papers";
 import { ActionButton, EpForm, Field, Msg, Submit } from "../../../ui";
+import { PaperFiles } from "./paper-files";
 
 export const metadata = { title: "Paper" };
 
@@ -39,6 +41,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
   ]);
   const pdfs = ["paper", "key", "solutions"].map((m) => ({ m, rel: `papers/${p.id}/${p.id}-${m}.pdf` })).filter((x) => storage.exists(x.rel));
   const draft = p.status === "draft";
+  const up = p.uploadOnly;
   const submitted = track.filter((t) => t.submission);
   return (
     <div className="space-y-5">
@@ -51,12 +54,13 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
         </h1>
         <p className="text-sm text-muted">
           Class {p.klass} {p.board} {p.subject} · {p.kind}
-          {p.mockMinutes ? ` (${p.mockMinutes} min)` : ""} · status <b>{p.status}</b> · {check.total} marks · MCQ {Math.round(check.mcqShare)}% · {check.chapters.length} chapters
+          {p.mockMinutes ? ` (${p.mockMinutes} min)` : ""} · status <b>{p.status}</b> ·{" "}
+          {up ? `${p.totalMarks ?? "?"} marks · uploaded file` : `${check.total} marks · MCQ ${Math.round(check.mcqShare)}% · ${check.chapters.length} chapters`}
           {p.dueAt && ` · due ${p.dueAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}`}
         </p>
       </div>
 
-      {(check.problems.length > 0 || check.warnings.length > 0) && (
+      {!up && (check.problems.length > 0 || check.warnings.length > 0) && (
         <div className="card space-y-1 text-sm">
           {check.problems.map((x) => (
             <p key={x} className="text-bad">
@@ -77,10 +81,19 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
             Publish
           </ActionButton>
         ) : (
-          <ActionButton action={newVersionAction} fields={{ paperId: p.id }}>
-            New version
+          !up && (
+            <ActionButton action={newVersionAction} fields={{ paperId: p.id }}>
+              New version
+            </ActionButton>
+          )
+        )}
+        {!draft && (
+          <ActionButton action={paperPostsAction} fields={{ paperId: p.id }}>
+            Draft group posts
           </ActionButton>
         )}
+        {!up && (
+          <>
         <EpForm action={cloneAction} className="flex items-center gap-1">
           <input type="hidden" name="paperId" value={p.id} />
           <select name="board" className="input w-auto py-1 text-xs">
@@ -105,13 +118,18 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
         <a href={`/exam-prep/papers/${encodeURIComponent(p.id)}/export`} className="text-accent hover:underline">
           Export questions (JSON)
         </a>
-        {!draft && (
+          </>
+        )}
+        {!draft && !up && (
           <Link href={`/exam-prep/papers/${encodeURIComponent(p.id)}/marking`} className="btn-primary ml-auto px-3 py-1">
             Marking →
           </Link>
         )}
       </section>
 
+      <PaperFiles paperId={p.id} uploadOnly={up} />
+
+      {!up && (
       <section className="card">
         <h2 className="mb-2 font-semibold text-[#0f3460]">Questions</h2>
         {p.sections.map((sec) => (
@@ -149,8 +167,9 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
             .join(" · ") || "none yet"}
         </p>
       </section>
+      )}
 
-      {draft && (
+      {draft && !up && (
         <div className="grid gap-5 lg:grid-cols-2">
           <section className="card space-y-2">
             <h2 className="font-semibold text-[#0f3460]">Add a question</h2>
@@ -330,19 +349,27 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
                   <option value="google_form">Google Form upload</option>
                   <option value="dm_manual">WhatsApp DM (manual path)</option>
                 </select>
-                <input name="mcq" placeholder="MCQ answers in order, e.g. ABCAD (or 1:A 2:C)" className="input font-mono" />
+                {!up && <input name="mcq" placeholder="MCQ answers in order, e.g. ABCAD (or 1:A 2:C)" className="input font-mono" />}
                 <input name="times" placeholder="Time per section (optional), e.g. A:20, B:35" className="input" />
                 <input name="submittedAt" type="datetime-local" className="input" title="When it was submitted (default now)" />
                 <Submit>File the sheet</Submit>
               </EpForm>
-              <h3 className="pt-2 text-sm font-semibold">MCQ answers from the form (CSV)</h3>
-              <EpForm action={mcqImportAction} className="flex flex-wrap gap-2">
+              {!up && <h3 className="pt-2 text-sm font-semibold">MCQ answers from the form (CSV)</h3>}
+              {!up && <EpForm action={mcqImportAction} className="flex flex-wrap gap-2">
                 <input type="hidden" name="paperId" value={p.id} />
                 <input type="file" name="file" accept=".csv" required className="input flex-1" />
                 <Submit tone="plain">Import answers</Submit>
                 <Msg />
-              </EpForm>
+              </EpForm>}
             </section>
+            {up ? (
+              <section className="card space-y-2 text-sm">
+                <h2 className="font-semibold text-[#0f3460]">Marking and reports</h2>
+                <p className="text-muted">
+                  This paper is your own uploaded file, so the app keeps the tracker and the filed sheets. AI marking, chapter analytics and the automatic reports need a paper built question by question.
+                </p>
+              </section>
+            ) : (
             <section className="card space-y-2 text-sm">
               <h2 className="font-semibold text-[#0f3460]">Class view</h2>
               {view?.hidden ? (
@@ -380,6 +407,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
                 </Link>
               </div>
             </section>
+            )}
           </div>
         </>
       )}

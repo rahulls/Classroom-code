@@ -49,10 +49,11 @@ export async function setChapterList(klass: number, subject: string, board: stri
 
 // ------------------------------ papers ------------------------------
 
-export async function createPaper(p: { klass: number; subject: string; board: string; number: number; title?: string; kind?: "paper" | "mock" | "quiz"; mockMinutes?: number; opensAt?: Date; dueAt?: Date }) {
+export async function createPaper(p: { klass: number; subject: string; board: string; number: number; title?: string; kind?: "paper" | "mock" | "quiz"; mockMinutes?: number; opensAt?: Date; dueAt?: Date; uploadOnly?: boolean; totalMarks?: number }) {
   const s = await getSettings();
   const id = makePaperId(p);
   if (await epdb.paper.findUnique({ where: { id } })) throw new EpError(`Paper ${id} already exists.`);
+  if (p.uploadOnly && !(p.totalMarks && p.totalMarks > 0)) throw new EpError("Give the paper's total marks.");
   const pattern = s["papers.patterns"][p.board] ?? s["papers.patterns"].CBSE ?? [];
   const paper = await epdb.paper.create({
     data: {
@@ -69,6 +70,8 @@ export async function createPaper(p: { klass: number; subject: string; board: st
       pattern: s["papers.patterns"][p.board] ? p.board : "CBSE",
       opensAt: p.opensAt,
       dueAt: p.dueAt,
+      uploadOnly: !!p.uploadOnly,
+      totalMarks: p.uploadOnly ? p.totalMarks : null,
       sections: { create: (p.kind === "quiz" ? [{ name: "A", type: "mcq" as const }] : pattern).map((sec, i) => ({ name: sec.name, type: sec.type, order: i })) },
     },
   });
@@ -168,6 +171,13 @@ export async function paperCheck(id: string) {
 export async function publishPaper(id: string) {
   const p = await epdb.paper.findUniqueOrThrow({ where: { id } });
   assertDraft(p);
+  if (p.uploadOnly) {
+    // The tutor's own file: it only needs the paper itself uploaded
+    if (!(await currentPaperFile(id, "paper"))) throw new EpError("Upload the paper file (PDF or CSV) first.");
+    await epdb.paper.update({ where: { id }, data: { status: "published", publishedAt: new Date() } });
+    await audit({ action: "paper.published", entity: "Paper", entityId: id, old: { status: "draft" }, new: { status: "published", uploadOnly: true, total: p.totalMarks } });
+    return { problems: [], warnings: [], total: p.totalMarks ?? 0, mcqShare: 0, chapters: [], byChapter: {} };
+  }
   const c = await paperCheck(id);
   if (c.problems.length) throw new EpError(`Can't publish: ${c.problems[0]}${c.problems.length > 1 ? ` (and ${c.problems.length - 1} more)` : ""}`);
   const now = new Date();
@@ -373,6 +383,7 @@ ${mode === "paper" ? `<p class="muted">Write your student code, class and paper 
 export async function paperPdfs(id: string) {
   const p = await paperWithQuestions(id);
   if (!p) throw new EpError("Paper not found.");
+  if (p.uploadOnly) return {}; // the tutor's own files are used as they are
   const s = await getSettings();
   const out: Record<string, string> = {};
   for (const mode of ["paper", "key", "solutions"] as const) {
@@ -405,4 +416,72 @@ export async function formulaSheetHtml(o: { klass: number; subject: string; chap
     onePage: true,
     body: `<h1>${esc(o.chapter)}: formula sheet</h1><p class="muted">Class ${o.klass} ${esc(o.subject)} · ${SUBJECT_CODE[o.subject] ?? ""}</p><h2>Topics</h2><p>${topics.map(esc).join(" · ") || "No tagged questions yet."}</p><h2>Formulas</h2>${lines.size ? `<ul>${[...lines].map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "<p class='muted'>Add solutions with formulas to the chapter's questions to fill this sheet.</p>"}`,
   });
+}
+
+// ------------------------------ the tutor's own paper files ------------------------------
+// A paper can simply be a file the tutor made (PDF or CSV): upload, keep versions, share. Uploading the
+// same kind again keeps the earlier file as an older version (nothing is overwritten).
+
+export const PAPER_FILE_KINDS = { paper: "Question paper", key: "Answer key", solutions: "Worked solutions", other: "Other" } as const;
+export type PaperFileKind = keyof typeof PAPER_FILE_KINDS;
+const FILE_TYPES: Record<string, string> = { pdf: "application/pdf", csv: "text/csv" };
+
+export async function addPaperFile(paperId: string, kind: PaperFileKind, file: { name: string; bytes: Uint8Array }) {
+  const s = await getSettings();
+  const paper = await epdb.paper.findUniqueOrThrow({ where: { id: paperId } });
+  const ext = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase() ?? "";
+  if (!FILE_TYPES[ext]) throw new EpError("Upload a PDF or CSV file.");
+  if (!(kind in PAPER_FILE_KINDS)) throw new EpError("Choose what the file is.");
+  if (!file.bytes.byteLength) throw new EpError("That file is empty.");
+  if (file.bytes.byteLength > s["storage.maxUploadMb"] * 1024 * 1024) throw new EpError(`The file is over ${s["storage.maxUploadMb"]} MB.`);
+  if (ext === "pdf") {
+    try {
+      const { pageCount } = await import("../adapters/pdf");
+      await pageCount(file.bytes);
+    } catch {
+      throw new EpError("That PDF can't be opened (damaged or password-protected).");
+    }
+  }
+  const safe = file.name.replace(/[^\w.() -]+/g, "_").slice(-80);
+  const rel = `papers/${paper.id}/uploads/${Date.now()}-${kind}-${safe}`;
+  await storage.save(rel, file.bytes);
+  const row = await epdb.$transaction(async (tx) => {
+    await tx.paperFile.updateMany({ where: { paperId, kind, isCurrent: true }, data: { isCurrent: false } });
+    return tx.paperFile.create({ data: { paperId, kind, name: file.name.slice(0, 120), path: rel, size: file.bytes.byteLength, mime: FILE_TYPES[ext]! } });
+  });
+  await audit({ action: "paper.file_uploaded", entity: "Paper", entityId: paperId, new: { kind, size: row.size, mime: row.mime } });
+  return row;
+}
+
+/** Deletes one uploaded file; if it was the current one, the previous version becomes current again. */
+export async function removePaperFile(fileId: string) {
+  const f = await epdb.paperFile.findUniqueOrThrow({ where: { id: fileId } });
+  const paper = await epdb.paper.findUniqueOrThrow({ where: { id: f.paperId } });
+  if (paper.uploadOnly && paper.status !== "draft" && f.kind === "paper" && f.isCurrent && (await epdb.paperFile.count({ where: { paperId: f.paperId, kind: "paper" } })) === 1)
+    throw new EpError("This is the published paper's only file: upload a new version instead.");
+  await storage.remove(f.path);
+  await epdb.paperFile.delete({ where: { id: fileId } });
+  if (f.isCurrent) {
+    const prev = await epdb.paperFile.findFirst({ where: { paperId: f.paperId, kind: f.kind }, orderBy: { uploadedAt: "desc" } });
+    if (prev) await epdb.paperFile.update({ where: { id: prev.id }, data: { isCurrent: true } });
+  }
+  await audit({ action: "paper.file_removed", entity: "Paper", entityId: f.paperId, old: { kind: f.kind } });
+}
+
+export const paperFiles = (paperId: string) => epdb.paperFile.findMany({ where: { paperId }, orderBy: [{ kind: "asc" }, { uploadedAt: "desc" }] });
+
+export const currentPaperFile = (paperId: string, kind: PaperFileKind) => epdb.paperFile.findFirst({ where: { paperId, kind, isCurrent: true } });
+
+/** The file to send with a group post: the uploaded one, else the PDF the app made from the questions. */
+export async function shareableFile(paperId: string, kind: "paper" | "key") {
+  const up = await currentPaperFile(paperId, kind);
+  if (up) return { path: up.path, name: up.name };
+  const made = `papers/${paperId}/${paperId}-${kind}.pdf`;
+  return storage.exists(made) ? { path: made, name: `${paperId}-${kind}.pdf` } : null;
+}
+
+/** First rows of a CSV paper, for the preview on the paper page. */
+export async function csvPreview(path: string, rows = 25) {
+  const text = (await storage.read(path)).toString("utf8");
+  return parseCsv(text).slice(0, rows);
 }

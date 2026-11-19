@@ -141,14 +141,34 @@ model Paper {
   status       String    @default("draft") // draft | published | closed | marked | reported
   isDiagnostic Boolean   @default(false)
   isCurrent    Boolean   @default(true) // newest version
+  uploadOnly   Boolean   @default(false) // the tutor's own file (PDF/CSV): no question-by-question entry
+  totalMarks   Float? // for upload-only papers
   createdAt    DateTime  @default(now())
   publishedAt  DateTime?
 
+  files       PaperFile[]
   sections    Section[]
   items       PaperQuestion[]
   submissions Submission[]
 
   @@index([klass, subject, board])
+}
+
+/// A file the tutor uploads for a paper (the paper itself, its key, solutions, or anything else).
+/// Uploading the same kind again keeps the old one as an earlier version.
+model PaperFile {
+  id         String   @id @default(cuid())
+  paperId    String
+  paper      Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  kind       String // paper | key | solutions | other
+  name       String // original file name
+  path       String // in private storage
+  size       Int
+  mime       String
+  isCurrent  Boolean  @default(true)
+  uploadedAt DateTime @default(now())
+
+  @@index([paperId, kind])
 }
 
 model Section {
