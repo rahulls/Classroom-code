@@ -83,6 +83,26 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
   );
 }
 
+/** Group posts: WhatsApp can't pre-fill a group message, so copy the text and open the group to paste it. */
+export function CopyAndOpenGroup({ text, groupLink }: { text: string; groupLink: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="btn border-[#25d366] px-2 py-1 text-xs"
+      title={groupLink ? "Copies the post and opens the group: paste and send" : "Add the group invite link in Settings → Brand"}
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setDone(true);
+        setTimeout(() => setDone(false), 2500);
+        if (groupLink) window.open(groupLink, "_blank", "noopener");
+      }}
+    >
+      {done ? "Copied: paste in the group ✓" : groupLink ? "📋 Copy & open group" : "📋 Copy"}
+    </button>
+  );
+}
+
 export const Req = () => <span className="text-bad"> *</span>;
 
 export function Field({ label, req, hint, children }: { label: string; req?: boolean; hint?: string; children: ReactNode }) {

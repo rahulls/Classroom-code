@@ -2,7 +2,7 @@ import { messageSentAction } from "@/modules/exam-prep/actions";
 import { epdb } from "@/modules/exam-prep/db";
 import { groupAdvice, renderTemplate, seedTemplates } from "@/modules/exam-prep/services/messaging";
 import { getSettings } from "@/modules/exam-prep/settings";
-import { ActionButton, CopyButton } from "../../ui";
+import { ActionButton, CopyAndOpenGroup, CopyButton } from "../../ui";
 import { TemplateEditor } from "./template-editor";
 
 export const metadata = { title: "Messages" };
@@ -27,7 +27,7 @@ export default async function MessagesPage() {
       </span>
       <pre className="flex-1 whitespace-pre-wrap font-sans text-sm">{m.body}</pre>
       <div className="flex flex-col gap-1">
-        <CopyButton text={m.body} />
+        {m.audience === "group" ? <CopyAndOpenGroup text={m.body} groupLink={s["brand.groupLink"]} /> : <CopyButton text={m.body} />}
         {m.waLink && (
           <a href={m.waLink} target="_blank" rel="noreferrer" className="btn px-2 py-1 text-xs">
             WhatsApp ↗
@@ -56,7 +56,7 @@ export default async function MessagesPage() {
       <section className="card space-y-2 text-sm">
         <h2 className="font-semibold text-[#0f3460]">Group rules (post once and pin)</h2>
         <pre className="whitespace-pre-wrap font-sans">{rules}</pre>
-        <CopyButton text={rules} />
+        <CopyAndOpenGroup text={rules} groupLink={s["brand.groupLink"]} />
       </section>
       <section className="space-y-2">
         <h2 className="font-semibold text-[#0f3460]">Shared group posts ({group.length})</h2>

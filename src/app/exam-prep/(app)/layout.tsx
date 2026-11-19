@@ -35,6 +35,9 @@ export default async function ExamPrepAppLayout({ children }: { children: React.
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2 text-xs text-white/80">
+            <Link href="/today" className="rounded border border-white/30 px-3 py-1.5 text-sm text-white hover:bg-white/10">
+              ← RSC Classroom
+            </Link>
             {t.username}
             <ActionButton action={logoutAction} fields={{}}>
               Sign out

@@ -39,6 +39,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               🎬 Studio
             </Link>
           )}
+          {can(user, "settings.manage") && process.env.EXAM_PREP_ENABLED === "true" && (
+            <Link href="/exam-prep" className="btn border-[#0f3460] bg-[#0f3460] text-white hover:bg-[#16507d]" title="Exam Prep: weekly test papers (separate module, own login)">
+              📝 Exam Prep
+            </Link>
+          )}
           {canEditAll && (
             <ActionForm action={toggleEditModeAction}>
               {!editMode && <input type="hidden" name="on" value="on" />}

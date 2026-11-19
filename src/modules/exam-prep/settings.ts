@@ -88,6 +88,12 @@ export const SETTINGS = {
   "brand.tuitionName": { group: "Brand", label: "Tuition name", schema: z.string().min(1).max(80), default: "Rahul Shah Classes" },
   "brand.tutorName": { group: "Brand", label: "Tutor name", schema: z.string().min(1).max(80), default: "Rahul Shah" },
   "brand.contact": { group: "Brand", label: "Contact line", schema: z.string().max(200), default: "Message the tutor on WhatsApp" },
+  "brand.groupLink": {
+    group: "Brand",
+    label: "Shared WhatsApp group invite link",
+    schema: z.string().regex(/^(https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+)?$/, "Paste the group's invite link (https://chat.whatsapp.com/...)"),
+    default: "",
+  },
   "brand.formLinks": { group: "Brand", label: "Google Form links by class", schema: z.record(z.string(), z.string()), default: {} as Record<string, string> },
   "brand.referralLine": { group: "Brand", label: "Referral line on PDFs", schema: z.string().max(160), default: "Know a student who would like free weekly papers? Share our group link." },
   "consent.currentVersion": { group: "Consent", label: "Current consent-text version", schema: z.number().int().min(1), default: 1 },
