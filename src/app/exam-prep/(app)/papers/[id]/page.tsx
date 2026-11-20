@@ -340,16 +340,29 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
               <EpForm action={submissionAction} className="grid gap-2">
                 <Msg />
                 <input type="hidden" name="paperId" value={p.id} />
-                <select name="studentId" className="input" required>
-                  {track
-                    .filter((t) => t.student.parents.some((x) => x.consentAt))
-                    .map((t) => (
-                      <option key={t.student.id} value={t.student.id}>
-                        {t.student.code} {t.student.name}
-                        {t.submission ? " (replace)" : ""}
+                <select name="studentId" className="input" required defaultValue="">
+                  <option value="" disabled>
+                    {track.length ? "Choose the student…" : `No Class ${p.klass} ${p.board} ${p.subject} students yet`}
+                  </option>
+                  {track.map((t) => {
+                    const consent = t.student.parents.some((x) => x.consentAt);
+                    return (
+                      <option key={t.student.id} value={t.student.id} disabled={!consent}>
+                        {t.student.code} · {t.student.name}
+                        {t.submission ? " (replace sheet)" : ""}
+                        {consent ? "" : " (no parent consent yet)"}
                       </option>
-                    ))}
+                    );
+                  })}
                 </select>
+                {!track.some((t) => t.student.parents.some((x) => x.consentAt)) && (
+                  <p className="text-xs text-warn">
+                    Only students in Class {p.klass}, {p.board}, taking {p.subject}, with parent consent appear here.{" "}
+                    <Link href="/exam-prep/students" className="text-accent hover:underline">
+                      Add or edit a student
+                    </Link>
+                  </p>
+                )}
                 <input type="file" name="files[]" multiple accept=".pdf,.jpg,.jpeg,.png" required className="input" />
                 <select name="source" className="input">
                   <option value="google_form">Google Form upload</option>
