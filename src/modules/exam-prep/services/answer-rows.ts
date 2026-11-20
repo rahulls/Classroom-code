@@ -110,7 +110,21 @@ export async function setRowMarks(submissionId: string, marks: Record<string, nu
   const fresh = await epdb.rowMark.findMany({ where: { submissionId } });
   const score = sheetScore(rows, fresh);
   if (score.open === 0 && sub.status !== "marked") await epdb.submission.update({ where: { id: submissionId }, data: { status: "marked" } });
-  return { changed, ...score };
+  // Marking complete: the report is made (or rebuilt from the new marks) straight away. A report
+  // problem never loses the saved marks; it is shown in the save message instead.
+  let report: "created" | "rebuilt" | "kept" | "failed" | null = null;
+  let reportError: string | undefined;
+  if (score.open === 0 && (changed > 0 || !(await epdb.reportCard.count({ where: { studentId: sub.studentId, paperId: sub.paperId } })))) {
+    try {
+      const { makeSheetReport } = await import("./reports");
+      report = await makeSheetReport(submissionId);
+    } catch (e) {
+      report = "failed";
+      reportError = e instanceof Error ? e.message : String(e);
+      console.error("[exam-prep] automatic report failed", submissionId, e);
+    }
+  }
+  return { changed, ...score, report, reportError };
 }
 
 /** Each current sheet's score on an uploaded paper. */

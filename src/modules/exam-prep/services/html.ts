@@ -18,6 +18,7 @@ h1 { font-size: 17pt; margin: 0 0 2mm; color: #2a1260; }
 h2 { font-size: 12pt; margin: 4mm 0 1.5mm; color: #2a1260; }
 .muted { color: #6b6585; font-size: 9pt; }
 .row { display: flex; gap: 6mm; }
+.glance { align-items: flex-start; } .glance h3 { font-size: 10pt; margin: 0 0 1mm; color: #13213f; } .glance .key { font-size: 8pt; margin: 0; }
 .box { border: 1px solid #ddd6f3; border-radius: 3mm; padding: 3mm 4mm; flex: 1; }
 .lost { border: 2px solid #e8590c; background: #fff4e6; border-radius: 3mm; padding: 2mm 4mm 3mm; margin: 3mm 0; }
 .lost h2 { color: #c2410c; margin-top: 1mm; } .lost table { width: 100%; } .lost td { border: 0; padding: 1mm 2mm; vertical-align: top; }

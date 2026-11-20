@@ -41,3 +41,4 @@ Keep a note of where each file came from, e.g. `music/upbeat-quiz.mp3` plus a li
 | Track | Problem | Date |
 |---|---|---|
 | `unused/_CLAIMED-alexander-nakarada-superepic(chosic.com).mp3` ("Superepic" by Alexander Nakarada, chosic.com, CC BY 4.0) | Content ID claim blocked the MS Dhoni Short (73 s). Shorts over 1 minute with a claim are blocked worldwide, whatever the licence or credit line says. | 2026-11-19 |
+| `unused/_CLAIMED-roa-music-summer-madness(chosic.com).mp3` ("Summer Madness" by Roa Music, chosic.com, CC BY 4.0) | Copyrighted / Content ID risk; Rahul excluded it from the audio list. | 2026-11-20 |

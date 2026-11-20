@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, FormMessage, SubmitButton } from "@/components/form";
-import { newThumbnailAction } from "@/modules/chaos/actions";
+import { canvaThumbnailAction, newThumbnailAction } from "@/modules/chaos/actions";
 import { FORMATS } from "@/modules/chaos/csv";
 import { getJob, imageCredit, listImages, musicCheck, type JobView } from "@/modules/chaos/jobs";
+import { canvaConnection } from "@/modules/chaos/canva";
 import { getUpload, videoMeta, youtubeConnection } from "@/modules/chaos/youtube";
 import { TopicPhoto } from "./topic-photo";
 import { VideoStatus } from "./video-status";
@@ -53,6 +54,13 @@ function Publish({ job }: { job: JobView }) {
             <input type="hidden" name="id" value={job.id} />
             <SubmitButton variant={job.thumb ? "default" : "primary"}>{job.thumb ? "🎲 New design" : "Design a thumbnail"}</SubmitButton>
           </ActionForm>
+          {canvaConnection().connected && (
+            <ActionForm action={canvaThumbnailAction}>
+              <FormMessage />
+              <input type="hidden" name="id" value={job.id} />
+              <SubmitButton variant="default">🎨 Canva thumbnail</SubmitButton>
+            </ActionForm>
+          )}
           {job.thumb ? (
             <a className="btn" href={`/chaos/videos/${job.id}/thumbnail?download=1&v=${job.thumb}`} download>
               ⬇ Download
@@ -62,6 +70,17 @@ function Publish({ job }: { job: JobView }) {
         <p className="text-xs text-muted">
           {job.format === "shorts" ? "1080×1920 cover, for Shorts and Reels." : "1280×720, the size YouTube wants."} Each design is different: new colours, layout, featured question and
           slogan. The answer is never shown.
+          {canvaConnection().connected ? (
+            " 🎨 Canva thumbnail asks Canva's AI for a full SEO-friendly design about the topic (1–2 minutes; also saved in your Canva folder)."
+          ) : (
+            <>
+              {" "}
+              <a href="/chaos/canva/connect" className="text-accent hover:underline">
+                Connect Canva
+              </a>{" "}
+              to get a 🎨 Canva thumbnail button.
+            </>
+          )}
         </p>
         <TopicPhoto
           id={job.id}

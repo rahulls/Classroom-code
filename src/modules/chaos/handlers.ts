@@ -23,6 +23,8 @@ import {
   parseTags,
 } from "./csv";
 import { generateQuizCsv, saveClaudeKey } from "./generate";
+import { canvaThumbnail, canvaForJob } from "./canva-jobs";
+import { canvaConnection, disconnectCanva } from "./canva";
 import {
   createJob,
   deleteJob,
@@ -65,6 +67,8 @@ export const createVideoAction = defineAction({
     musicMood: z.enum(MUSIC_MOODS.map((m) => m.value) as [string, ...string[]]).optional(),
     ranks: text(200),
     ranksOn: z.string().optional(),
+    canva: z.string().optional(),
+    canvaQuestions: z.string().optional(),
   }),
   run: async (input, { user }) => {
     const ready = engineReady();
@@ -78,6 +82,7 @@ export const createVideoAction = defineAction({
       if (questions.length < input.count) return { ok: false, error: `The CSV has ${questions.length} questions; ${input.count} were asked for.`, fieldErrors: { count: "Not enough questions" } };
       questions = questions.slice(0, input.count);
     }
+    if (input.canva && !canvaConnection().connected) return { ok: false, error: "Connect Canva first (Chaos Creators → Canva), or untick Canva designs." };
     const titleLines = [input.titleLine1, input.titleLine2].filter((s): s is string => !!s);
     const job = createJob({
       title: input.title || input.fileName?.replace(/\.csv$/i, "") || "Quiz video",
@@ -95,9 +100,12 @@ export const createVideoAction = defineAction({
         timer_seconds: input.timerSeconds,
         voice: input.voice,
         music_mood: input.musicMood,
+        canva: input.canva ? true : undefined,
+        canva_questions: input.canva && input.canvaQuestions ? true : undefined,
         ranks: input.format !== "youtube" ? undefined : !input.ranksOn ? ["off"] : parseRanks(input.ranks ?? "").length >= 2 ? parseRanks(input.ranks ?? "") : undefined,
       },
     });
+    if (job.settings.canva) void canvaForJob(job.id); // runs on while the engine records the narration
     await audit({ action: "chaos.video.created", actor: user, entity: "chaos_video", entityId: job.id, after: { format: job.format, questions: job.questions } });
     revalidatePath("/chaos");
     redirect(`/chaos/videos/${job.id}`);
@@ -184,6 +192,32 @@ export const discardCsvAction = defineAction({
 // ------------------------------ thumbnails ------------------------------
 
 const jobId = z.string().regex(/^[a-z0-9]{6,40}$/);
+
+export const disconnectCanvaAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({}),
+  run: async (_input, { user }) => {
+    disconnectCanva();
+    await audit({ action: "chaos.canva.disconnected", actor: user, entity: "chaos_canva", entityId: "account" });
+    revalidatePath("/chaos/canva");
+    return { ok: true, message: "Canva disconnected." };
+  },
+});
+
+/** A thumbnail designed by Canva's AI (1–2 minutes). The old one stays if it fails. */
+export const canvaThumbnailAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ id: jobId }),
+  run: async ({ id }, { user }) => {
+    const job = getJob(id);
+    if (!job || job.status.stage !== "done") return { ok: false, error: "The video isn't ready yet." };
+    const url = await canvaThumbnail(id);
+    await audit({ action: "chaos.thumbnail.canva", actor: user, entity: "chaos_video", entityId: id, after: { design: url } });
+    revalidatePath(`/chaos/videos/${id}`);
+    revalidatePath("/chaos");
+    return { ok: true, message: "Canva thumbnail made. The design is also in your Canva folder." };
+  },
+});
 
 export const newThumbnailAction = defineAction({
   permission: PERMISSION,

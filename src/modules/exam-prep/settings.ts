@@ -89,6 +89,7 @@ export const SETTINGS = {
   "brand.tuitionName": { group: "Brand", label: "Tuition name", schema: z.string().min(1).max(80), default: "Rahul Shah Classes" },
   "brand.tutorName": { group: "Brand", label: "Tutor name", schema: z.string().min(1).max(80), default: "Rahul Shah" },
   "brand.contact": { group: "Brand", label: "Contact line", schema: z.string().max(200), default: "Message the tutor on WhatsApp" },
+  "brand.whatsapp": { group: "Brand", label: "Tutor's WhatsApp number (shown on reports, with a QR code)", schema: z.string().max(30), default: "+91 95603 15528" },
   "brand.groupLink": {
     group: "Brand",
     label: "Shared WhatsApp group invite link",

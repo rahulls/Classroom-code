@@ -310,6 +310,18 @@ export async function refreshSheetReportAction(prev: EpResult, fd: FormData): Pr
   return h.refreshSheetReportAction(prev, fd);
 }
 
+export async function discardReportAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.discardReportAction(prev, fd);
+}
+
+export async function regenerateReportAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.regenerateReportAction(prev, fd);
+}
+
+export async function sendReportAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.sendReportAction(prev, fd);
+}
+
 export async function approveSheetReportAction(prev: EpResult, fd: FormData): Promise<EpResult> {
   return h.approveSheetReportAction(prev, fd);
 }

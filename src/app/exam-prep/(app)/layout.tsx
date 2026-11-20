@@ -7,6 +7,7 @@ const NAV = [
   ["/exam-prep", "Today"],
   ["/exam-prep/students", "Students"],
   ["/exam-prep/papers", "Papers"],
+  ["/exam-prep/marking", "Marking"],
   ["/exam-prep/calendar", "Calendar"],
   ["/exam-prep/reports", "Reports"],
   ["/exam-prep/ranks", "Ranks"],

@@ -616,9 +616,9 @@ describe("uploaded paper with paper details: chapter view", () => {
 });
 
 describe("report for one row-marked sheet", () => {
-  it("prepare → review PDFs → approve queues them; lost marks listed with question numbers; never twice", async () => {
+  it("made automatically when marking is complete; rebuilt on changes; discard / regenerate / send; one report, never sent twice", async () => {
     const { setPaperRows, setRowMarks } = await import("../services/answer-rows");
-    const { generateSheetReports, approveSheetReports, refreshSheetReports } = await import("../services/reports");
+    const { generateSheetReports, discardReport, regenerateReport, sendReport, markReportSent } = await import("../services/reports");
     const { addPaperFile } = await import("../services/papers");
     await setSettings({ "analytics.strong": 100, "analytics.okay": 80, "analytics.average": 60 });
     const p = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 51, uploadOnly: true, totalMarks: 10 });
@@ -627,32 +627,55 @@ describe("report for one row-marked sheet", () => {
     await publishPaper(p.id);
     const st = await student();
     const sub = await addSubmission({ studentId: st.id, paperId: p.id, files: [{ name: "s.pdf", bytes: await fakeSheet() }], source: "form" });
-    await setRowMarks(sub.id, { "1": 1, "2": 0 }, { "2": "concept" });
+    // Half marked: no report yet
+    expect((await setRowMarks(sub.id, { "1": 1, "2": 0 }, { "2": "concept" })).report).toBeNull();
     await expect(generateSheetReports(sub.id)).rejects.toThrow(/not marked yet/);
-    await setRowMarks(sub.id, { "3.B": 1, "4": 3 }, { "3.B": "calculation", "4": "calculation" });
-    const g = await generateSheetReports(sub.id);
-    expect(g.created).toBeGreaterThanOrEqual(1);
-    expect((await generateSheetReports(sub.id)).created).toBe(0);
+    expect(await epdb.reportCard.count({ where: { studentId: st.id, paperId: p.id } })).toBe(0);
+    // The last answer marked: the report is made straight away (one per sheet, no parent copies)
+    expect((await setRowMarks(sub.id, { "3.B": 1, "4": 3 }, { "3.B": "calculation", "4": "calculation" })).report).toBe("created");
+    expect(await epdb.reportCard.count({ where: { studentId: st.id, paperId: p.id } })).toBe(1);
     const rc = await epdb.reportCard.findFirstOrThrow({ where: { studentId: st.id, paperId: p.id, audience: "student" } });
-    const d = rc.data as { totals: { got: number; max: number }; lost: { tag: string; marks: number; questions: string[] }[]; chapter_breakdown: { chapter: string; band: string }[] };
+    expect(rc.status).toBe("draft");
+    type D = { kind: string; totals: { got: number; max: number }; lost: { tag: string; n: number; where: [string, number][] }[]; chapters: { name: string; band: string }[]; redo: string[] };
+    const d = rc.data as D;
+    expect(d.kind).toBe("sheet");
     expect(d.totals).toMatchObject({ got: 5, max: 10 });
-    expect(d.lost).toEqual([
-      { tag: "calculation", marks: 4, questions: ["3.B", "4"] },
-      { tag: "concept", marks: 1, questions: ["2"] },
+    // Lost by the tutor's own tags only; 3.B lost 2, Q4 lost 2
+    expect(d.lost.map((l) => [l.tag, l.n])).toEqual([
+      ["calculation", 4],
+      ["concept", 1],
     ]);
+    expect(d.redo).toEqual(["2", "3", "4"]);
     // Real Numbers 2/4 (Q1 + attempted 3.B), Polynomials 0/1, Triangles 3/5 → Average at 60%
-    expect(Object.fromEntries(d.chapter_breakdown.map((c) => [c.chapter, c.band]))).toEqual({ "Real Numbers": "Needs support", Polynomials: "Needs support", Triangles: "Average" });
+    expect(Object.fromEntries(d.chapters.map((c) => [c.name, c.band]))).toEqual({ "Real Numbers": "Needs support", Polynomials: "Needs support", Triangles: "Average" });
+    expect(JSON.stringify(rc.data)).not.toMatch(/solution|markingScheme/);
     expect(storage.exists(rc.pdfPath!)).toBe(true);
-    // A marks change, then rebuild
-    await setRowMarks(sub.id, { "4": 5 });
-    expect(await refreshSheetReports(sub.id)).toBeGreaterThanOrEqual(1);
-    const d2 = (await epdb.reportCard.findUniqueOrThrow({ where: { id: rc.id } })).data as { totals: { got: number } };
-    expect(d2.totals.got).toBe(7);
-    // Approve: ready and queued for WhatsApp (needs a verified parent number)
+    // A marks change rebuilds it at once; Triangles 4/5 = 80% is "Good"
+    expect((await setRowMarks(sub.id, { "4": 4 })).report).toBe("rebuilt");
+    const d2 = (await epdb.reportCard.findUniqueOrThrow({ where: { id: rc.id } })).data as D;
+    expect(d2.totals.got).toBe(6);
+    expect(d2.chapters.find((c) => c.name === "Triangles")?.band).toBe("Good");
+    // Discard: set aside, and later mark changes don't bring it back
+    await discardReport(rc.id);
+    expect((await setRowMarks(sub.id, { "4": 5 })).report).toBe("kept");
+    expect((await epdb.reportCard.findUniqueOrThrow({ where: { id: rc.id } })).status).toBe("discarded");
+    await expect(sendReport(rc.id)).rejects.toThrow(/discarded/);
+    // Regenerate: back for review with the current marks
+    await regenerateReport(rc.id);
+    const back = await epdb.reportCard.findUniqueOrThrow({ where: { id: rc.id } });
+    expect(back.status).toBe("draft");
+    expect((back.data as D).totals.got).toBe(7);
+    // Send needs a verified parent number; then it is queued for WhatsApp, once
+    await expect(sendReport(rc.id)).rejects.toThrow(/isn't verified/);
     await markVerified(st.parents[0]!.id);
-    const a = await approveSheetReports(sub.id);
-    expect(a.approved).toBeGreaterThanOrEqual(1);
+    const s1 = await sendReport(rc.id);
+    expect(s1.waLink).toMatch(/^https:\/\/wa\.me\//);
+    await sendReport(rc.id);
     expect(await epdb.message.count({ where: { templateKey: "student_report", studentId: st.id } })).toBe(1);
-    await expect(approveSheetReports(sub.id)).rejects.toThrow(/No draft reports/);
+    await markReportSent(rc.id);
+    await expect(sendReport(rc.id)).rejects.toThrow(/already sent/);
+    await expect(discardReport(rc.id)).rejects.toThrow(/already sent/);
+    // A sent report is never rebuilt by mark changes
+    expect((await setRowMarks(sub.id, { "4": 4 })).report).toBe("kept");
   });
 });

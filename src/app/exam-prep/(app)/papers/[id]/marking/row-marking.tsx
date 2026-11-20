@@ -4,7 +4,7 @@ import { epdb } from "@/modules/exam-prep/db";
 import { chapterBreakdown, sheetScore } from "@/modules/exam-prep/domain/answer-rows";
 import { paperRows } from "@/modules/exam-prep/services/answer-rows";
 import { RowGrid } from "./row-grid";
-import { approveSheetReportAction, refreshSheetReportAction, sheetReportAction } from "@/modules/exam-prep/actions";
+import { sheetReportAction } from "@/modules/exam-prep/actions";
 import { parentReachable } from "@/modules/exam-prep/services/people";
 import { ActionButton } from "../../../../ui";
 
@@ -42,9 +42,14 @@ export async function RowMarking({ paper, sheet }: { paper: { id: string; title:
         <>
           <div className="flex flex-wrap gap-1 text-xs">
             {scored.map(({ s, score }) => (
-              <Link key={s.id} href={`?sheet=${s.id}`} className={`rounded border px-2 py-1 ${s.id === current?.s.id ? "border-accent bg-accent/10" : "border-line"}`}>
-                {s.student.code} · {score.got}/{score.max}
-                {score.open ? <span className="text-warn"> •</span> : <span className="text-ok"> ✓</span>}
+              <Link
+                key={s.id}
+                href={`?sheet=${s.id}`}
+                title={score.open ? `${score.open} answer${score.open === 1 ? "" : "s"} not marked yet` : "Fully marked"}
+                className={`rounded border px-2 py-1 text-[#1d1838] hover:bg-accent/5 ${s.id === current?.s.id ? "border-accent bg-accent/10 font-semibold" : "border-line bg-white"}`}
+              >
+                <span className="font-mono text-[#0f3460]">{s.student.code}</span> · {s.student.name} · {score.got}/{score.max}
+                {score.open ? <span className="text-warn"> • {score.open} left</span> : <span className="text-ok"> ✓</span>}
               </Link>
             ))}
           </div>
@@ -112,55 +117,41 @@ function SheetChapters({ lines }: { lines: ReturnType<typeof chapterBreakdown> }
   );
 }
 
-/** Report for this sheet: prepare (draft PDFs) → review → approve (queued for WhatsApp / email). */
+/** Report for this sheet: made automatically once every answer is marked; reviewed and sent from Reports. */
 async function SheetReport({ submissionId, studentId, paperId, open }: { submissionId: string; studentId: string; paperId: string; open: number }) {
   const [rcs, st] = await Promise.all([
     epdb.reportCard.findMany({ where: { studentId, paperId }, orderBy: { audience: "desc" } }),
     epdb.student.findUniqueOrThrow({ where: { id: studentId }, include: { parents: true } }),
   ]);
   const reachable = st.parents.some((p) => parentReachable(p));
-  const drafts = rcs.filter((r) => r.status === "draft");
+  const LABEL: Record<string, string> = { draft: "made · to review", ready: "approved", sent: "sent", failed: "failed", discarded: "discarded" };
   return (
     <section className="card space-y-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <b>Report</b>
-        {open > 0 && <span className="text-xs text-muted">Mark all answers first ({open} left; give 0 for a blank answer).</span>}
+        {open > 0 && <span className="text-xs text-muted">Made automatically when every answer is marked ({open} left; give 0 for a blank answer).</span>}
       </div>
       {open === 0 && !rcs.length && (
-        <ActionButton action={sheetReportAction} fields={{ submissionId }} tone="primary">
-          Prepare report
-        </ActionButton>
-      )}
-      {rcs.length > 0 && (
-        <ul className="space-y-1 text-xs">
-          {rcs.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2">
-              <span className="w-28 font-semibold">{r.audience === "student" ? "Student report" : `Parent report (${r.language})`}</span>
-              <span className={r.status === "sent" ? "text-ok" : r.status === "failed" ? "text-bad" : "text-muted"}>{r.status === "draft" ? "to review" : r.status}</span>
-              {r.pdfPath && (
-                <a href={signedLink(r.pdfPath)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                  Open PDF ↗
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {drafts.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <ActionButton action={refreshSheetReportAction} fields={{ submissionId }}>
-            Rebuild after changing marks
-          </ActionButton>
-          <ActionButton action={approveSheetReportAction} fields={{ submissionId }} tone="primary" confirm="Approve this report and put it in the send queue?">
-            Approve and queue for sending
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-warn">Fully marked, but no report yet.</span>
+          <ActionButton action={sheetReportAction} fields={{ submissionId }} tone="primary">
+            Make report
           </ActionButton>
         </div>
       )}
-      {rcs.some((r) => r.status !== "draft") && (
-        <Link href="/exam-prep/reports" className="text-xs text-accent hover:underline">
-          Send from Reports (WhatsApp queue) →
-        </Link>
-      )}
+      {rcs.map((r) => (
+        <div key={r.id} className="flex flex-wrap items-center gap-2 text-xs">
+          <span className={r.status === "sent" ? "text-ok" : r.status === "failed" ? "text-bad" : r.status === "discarded" ? "text-muted" : "text-warn"}>{LABEL[r.status] ?? r.status}</span>
+          {r.pdfPath && (
+            <a href={signedLink(r.pdfPath)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              Open PDF ↗
+            </a>
+          )}
+          <Link href="/exam-prep/reports" className="text-accent hover:underline">
+            Send, regenerate or discard in Reports →
+          </Link>
+        </div>
+      ))}
       {!reachable && (
         <p className="text-xs text-warn">
           The parent&apos;s WhatsApp number isn&apos;t verified (or consent is missing), so there is no parent report and nothing can be queued for WhatsApp.{" "}

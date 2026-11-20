@@ -620,7 +620,15 @@ export const rowMarksAction = epAction(z.object({ submissionId: id }).catchall(z
     } else if (k.startsWith("t:") && TAGS_OK.includes(String(val))) tags[k.slice(2)] = String(val);
   }
   const r = await setRowMarks(v.submissionId, marks, tags);
-  return done(`Saved. ${r.got} / ${r.max}${r.open ? ` · ${r.open} answer${r.open === 1 ? "" : "s"} not marked yet` : " · fully marked"}.`);
+  const rep =
+    r.report === "created"
+      ? " Report made: review it in Reports."
+      : r.report === "rebuilt"
+        ? " Report rebuilt from the new marks."
+        : r.report === "failed"
+          ? ` The report couldn't be made (${r.reportError ?? "error"}): use Regenerate in Reports.`
+          : "";
+  return done(`Saved. ${r.got} / ${r.max}${r.open ? ` · ${r.open} answer${r.open === 1 ? "" : "s"} not marked yet` : " · fully marked"}.${rep}`);
 });
 
 // ------------------------------ reports for one sheet (uploaded papers) ------------------------------
@@ -635,6 +643,28 @@ export const refreshSheetReportAction = epAction(z.object({ submissionId: id }),
   const { refreshSheetReports } = await import("./services/reports");
   const n = await refreshSheetReports(v.submissionId);
   return done(n ? `Rebuilt ${n} report${n === 1 ? "" : "s"} from the current marks.` : "Nothing to rebuild (sent reports are kept as sent).");
+});
+
+// ------------------------------ Reports page: one report at a time ------------------------------
+
+export const discardReportAction = epAction(z.object({ reportId: id }), async (v) => {
+  const { discardReport } = await import("./services/reports");
+  await discardReport(v.reportId);
+  return done("Discarded. Regenerate brings it back.", "/exam-prep/reports");
+});
+
+export const regenerateReportAction = epAction(z.object({ reportId: id }), async (v) => {
+  await regenerateReport(v.reportId);
+  return done("Regenerated from the current marks: review it before sending.", "/exam-prep/reports");
+});
+
+export const sendReportAction = epAction(z.object({ reportId: id }), async (v) => {
+  const { sendReport } = await import("./services/reports");
+  const r = await sendReport(v.reportId);
+  return done(
+    r.status === "sent" ? "Sent by email." : r.waLink ? "Ready in WhatsApp: open the chat, attach the PDF, send, then press Mark sent." : "Approved. It will go out with the next delivery run.",
+    "/exam-prep/reports",
+  );
 });
 
 export const approveSheetReportAction = epAction(z.object({ submissionId: id }), async (v) => {

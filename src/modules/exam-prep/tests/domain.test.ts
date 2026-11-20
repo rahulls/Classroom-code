@@ -317,3 +317,30 @@ describe("optional Average band", async () => {
     expect(band(40, { strong: 75, okay: 50, average: 0 })).toBe("Needs support");
   });
 });
+
+describe("report web chart", async () => {
+  const { chapterRadar, shortChapter } = await import("../services/radar");
+  it("needs at least 3 chapters", () => {
+    expect(chapterRadar([{ chapter: "A", pct: 50, weak: true }, { chapter: "B", pct: 90, weak: false }], [60, 80])).toBeNull();
+  });
+  it("draws one point per chapter, dashed cut-off rings, weak chapters in red", () => {
+    const svg = chapterRadar(
+      [
+        { chapter: "Real Numbers", pct: 50, weak: true },
+        { chapter: "Quadratic Equations", pct: 100, weak: false },
+        { chapter: "Surface Areas and Volumes", pct: 0, weak: true },
+        { chapter: "Circles", pct: 86, weak: false },
+      ],
+      [60, 80],
+    )!;
+    expect(svg.match(/<circle /g)).toHaveLength(4);
+    expect(svg.match(/stroke-dasharray/g)).toHaveLength(2);
+    expect(svg).toContain(">Real No.<");
+    expect(svg).toContain(">Surface Area &amp; Vol.<");
+    expect(svg.match(/fill="#b3261e" font-weight="700"/g)).toHaveLength(2);
+  });
+  it("shortens unknown long chapter names", () => {
+    expect(shortChapter("Circles")).toBe("Circles");
+    expect(shortChapter("A Very Long Chapter Name Here").endsWith("…")).toBe(true);
+  });
+});

@@ -13,9 +13,10 @@ import { IMAGE_NAME_RE, parseQuizCsv, type QuizQuestion, type VideoFormat } from
 
 export const CHAOS_HOME = process.env.CHAOS_HOME || path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "RSC Classroom", "chaos");
 const JOBS = path.join(CHAOS_HOME, "jobs");
-const PYTHON = path.join(CHAOS_HOME, "venv", process.platform === "win32" ? "Scripts\\python.exe" : "bin/python");
+export const PYTHON = path.join(CHAOS_HOME, "venv", process.platform === "win32" ? "Scripts\\python.exe" : "bin/python");
 const ENGINE = path.join(process.cwd(), "src", "Chaos creators", "engine", "quiz_video.py");
 const THUMBNAILER = path.join(path.dirname(ENGINE), "thumbnail.py");
+export const ENGINE_DIR = path.dirname(ENGINE);
 export const CHAOS_ASSETS = path.join(process.cwd(), "src", "Chaos creators");
 /**
  * Rahul's own folders: every uploaded CSV is kept in csv\, and every finished video (with its
@@ -71,6 +72,10 @@ export type JobSettings = {
   ranks?: string[];
   /** Topic photo for the thumbnail: a file in src\Chaos creators\images */
   thumb_image?: string;
+  /** Canva designs: the thumbnail and the intro / ending artwork (canva-jobs.ts, engine/canva_images.py) */
+  canva?: boolean;
+  /** Canva background behind every question (needs canva; up to 25 questions) */
+  canva_questions?: boolean;
 };
 
 export type JobSpec = {
@@ -239,6 +244,12 @@ export function createJob(input: {
   // YouTube title / description / tags from the CSV's settings lines (editable later)
   if (input.youtube && (input.youtube.title || input.youtube.description || input.youtube.tags?.length || input.youtube.category)) saveYoutubeMeta(id, input.youtube);
 
+  // Canva designs are made by the web app (canva-jobs.ts) while the engine records the narration;
+  // the engine waits for canva\status.json to say they're done before it draws the intro.
+  if (input.settings.canva) {
+    fs.mkdirSync(path.join(dir, "canva"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "canva", "status.json"), JSON.stringify({ state: "running", updatedAt: new Date().toISOString() }), "utf8");
+  }
   const log = fs.openSync(path.join(dir, "engine.log"), "a");
   const child = spawn(PYTHON, [ENGINE, dir], {
     cwd: path.dirname(ENGINE),

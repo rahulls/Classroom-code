@@ -214,3 +214,53 @@ function buildCsv(out: z.infer<typeof Out>, want: number) {
   const fileName = `${name.replace(/[^\w -]+/g, "").trim().replace(/\s+/g, "-") || "quiz"}.csv`;
   return { csv, questions: rows.length, fileName };
 }
+
+// ------------------------- picture prompts for Canva -------------------------
+
+const PICTURE_SYSTEM = `You write prompts for an AI image generator (Canva). Each picture becomes the full-screen background behind one multiple-choice question of a YouTube quiz video; the question card and four answer buttons are drawn on top.
+
+For every question, write one prompt (at most 300 characters) for a vivid, cinematic picture that fits the question's theme and the quiz topic.
+
+Hard rules:
+- NEVER give away or hint at the correct answer. Assume the viewer studies the picture to find it: anything that points to one option over the others is forbidden (names, places, dates, numbers, people's gender or age when the options differ in that, landmarks, flags, team colours, logos, a picture of the answer itself). Picture the question's theme in a way that fits all four options equally.
+- No text, letters, numbers, logos or watermarks in the picture: end every prompt with "No text, no logos."
+- No realistic likeness of real, identifiable people (sportspeople, actors, politicians): use silhouettes, hidden faces, objects or places instead. Fictional and game characters are fine.
+- Keep the middle of the picture fairly calm (the question sits there). Family-friendly.
+- Vary the scenes so consecutive questions don't look alike.`;
+
+/**
+ * One Canva image prompt per question, written by Claude so no picture gives the answer away.
+ * Returns null when there is no Claude key (the caller then uses plain topic artwork).
+ */
+export async function questionPicturePrompts(topic: string, questions: { question: string; options: string[]; answer: number }[]): Promise<string[] | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY || storedKey();
+  if (!apiKey || !questions.length) return null;
+  const client = new Anthropic({ apiKey, timeout: 5 * 60 * 1000 });
+  const list = questions
+    .map((q, i) => `${i + 1}. ${q.question}\n   Options: ${q.options.join(" | ")}\n   Correct answer (never hint at it): ${q.options[q.answer]}`)
+    .join("\n");
+  const stream = client.beta.messages.stream({
+    model: MODEL,
+    max_tokens: 32000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    output_config: {
+      effort: "medium",
+      format: {
+        type: "json_schema",
+        schema: { type: "object", additionalProperties: false, required: ["prompts"], properties: { prompts: { type: "array", items: { type: "string" } } } },
+      },
+    },
+    system: PICTURE_SYSTEM,
+    messages: [{ role: "user", content: `Quiz topic: ${topic}\n\nQuestions:\n${list}\n\nWrite exactly ${questions.length} prompts, in the same order.` }],
+  });
+  const message = await stream.finalMessage();
+  if (message.stop_reason === "refusal" || message.stop_reason === "max_tokens") return null;
+  const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  try {
+    const prompts = z.object({ prompts: z.array(z.string()) }).parse(JSON.parse(text)).prompts;
+    return prompts.length === questions.length ? prompts.map((p) => p.slice(0, 400)) : null;
+  } catch {
+    return null;
+  }
+}

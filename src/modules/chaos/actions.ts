@@ -35,6 +35,14 @@ export async function discardCsvAction(prev: ActionState, fd: FormData): Promise
   return h.discardCsvAction(prev, fd);
 }
 
+export async function disconnectCanvaAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.disconnectCanvaAction(prev, fd);
+}
+
+export async function canvaThumbnailAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.canvaThumbnailAction(prev, fd);
+}
+
 export async function newThumbnailAction(prev: ActionState, fd: FormData): Promise<ActionState> {
   return h.newThumbnailAction(prev, fd);
 }

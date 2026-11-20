@@ -1,0 +1,18 @@
+Added 2026-11-20 - YouTube Audio Library (downloaded by Rahul from YouTube Studio):
+music/upbeat/  Egomania - Trey Xavier, Mostly Moss, Rod Kim
+music/upbeat/  Lift Me Up - Dropical
+music/upbeat/  She's Good To Me - Vyasa Dodson
+music/upbeat/  Exes - Patrick Jordan Patrikios
+music/upbeat/  Right - National Sweetheart
+music/upbeat/  CR Rider - Chris von Sneidern
+music/epic/    Raag Ahir Bhairav - Drut Teentaal (Sarangi, Tabla) - Sandeep Das, Aneesh Mishra
+music/epic/    The Mumbai Beat - Hanu Dixit
+music/epic/    Fallout - The Soundlings
+music/suspense/ Stone Door Woman - Patrick Jordan Patrikios
+music/suspense/ The Swan - The Soundlings
+music/suspense/ The Closest Thing - National Sweetheart
+outro/         Wooden Train Whistle (sound effect)
+unused/        Kids Playing (ambience, not music; would be boosted under the voice)
+
+Moved to unused/ 2026-11-20 (chosic.com CC BY, same Content ID risk as Superepic):
+6-Happy-Commercial-Piano(chosic.com).mp3, Badly-chosic.com_.mp3

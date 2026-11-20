@@ -12,6 +12,7 @@ import { classBand, sheetAnalytics, studentHistory } from "./analytics";
 import { esc, pageHtml } from "./html";
 import { draft, renderTemplate, setLabel } from "./messaging";
 import { parentReachable } from "./people";
+import { chapterRadar } from "./radar";
 
 // R7 reports. One page each, student and parent, PDF and on screen. Idempotent per
 // (student, paper, audience, guardian). Ranks never appear here: this file must not read RankRecord.
@@ -42,6 +43,8 @@ const L = {
     other: "Other",
     book: "Book a 1:1 session to go through this report in detail.",
     allFull: "No marks lost on this paper.",
+    glance: "Strengths and weaknesses at a glance",
+    glanceKey: (r: string) => `Shaded shape: this paper's score in each chapter. Dashed rings: ${r}. Red: needs support.`,
     cohort: { "Top third": "Top third", Middle: "Middle", "Needs support": "Needs support" } as Record<string, string>,
     tags: { concept: "Concept", calculation: "Calculation", missing_steps: "Missing steps", misread: "Misread question" } as Record<string, string>,
     tasks: (w: string[]) => [`Redo the listed questions without looking at the key.`, `Re-read your notes on ${w.join(" and ")} and solve 5 textbook questions from each.`, `Check your redo answers against Friday's worked solutions.`],
@@ -73,6 +76,8 @@ const L = {
     other: "अन्य",
     book: "इस रिपोर्ट को विस्तार से समझने के लिए 1:1 सत्र बुक करें।",
     allFull: "इस पेपर में कोई अंक नहीं कटा।",
+    glance: "एक नज़र में मज़बूती और कमज़ोरी",
+    glanceKey: (r: string) => `छायांकित आकृति: हर अध्याय में इस पेपर का स्कोर। डैश वाले घेरे: ${r}। लाल: मदद चाहिए।`,
     cohort: { "Top third": "ऊपरी तिहाई", Middle: "बीच में", "Needs support": "मदद की ज़रूरत" } as Record<string, string>,
     tags: { concept: "अवधारणा", calculation: "गणना", missing_steps: "चरण छूटे", misread: "प्रश्न गलत पढ़ा" } as Record<string, string>,
     tasks: (w: string[]) => [`सूची के प्रश्न बिना उत्तर-कुंजी देखे दोबारा हल करें।`, `${w.join(" और ")} के नोट्स दोबारा पढ़ें और हर अध्याय से 5 प्रश्न हल करें।`, `शुक्रवार के हल से अपने उत्तर मिलाएँ।`],
@@ -123,6 +128,14 @@ export function reportHtml(d: ReportData, audience: Audience, s: Settings, compa
   const rows = d.chapter_breakdown
     .map((r) => `<tr><td>${esc(r.chapter)}</td><td>${r.got}/${r.max}</td><td style="width:30%"><div class="bar"><i style="width:${r.pct}%"></i></div></td><td>${r.pct}%</td><td><span class="pill ${bandCls(r.band)}">${esc(t.bands[r.band])}</span></td></tr>`)
     .join("");
+  // The web chart beside the table; its dashed rings are the Average and Okay cut-offs
+  const rings = [s["analytics.average"], s["analytics.okay"]].filter((x) => x > 0 && x < 100);
+  const radar = chapterRadar(
+    d.chapter_breakdown.map((r) => ({ chapter: r.chapter, pct: r.pct, weak: r.band === "Needs support" })),
+    rings,
+  );
+  // Beside the chart the table drops its bars (the chart shows the same thing)
+  const slim = d.chapter_breakdown.map((r) => `<tr><td>${esc(r.chapter)}</td><td>${r.got}/${r.max}</td><td>${r.pct}%</td><td><span class="pill ${bandCls(r.band)}">${esc(t.bands[r.band])}</span></td></tr>`).join("");
   const trendLine = d.trend ? d.trend.points.map((p) => `${p.pct}%`).join(" → ") : t.first;
   const weak = d.weak.join(", ");
   const blocks: string[] = [];
@@ -145,15 +158,17 @@ export function reportHtml(d: ReportData, audience: Audience, s: Settings, compa
     if (d.quality?.length) blocks.push(`<h2>${t.quality}</h2><ul>${d.quality.map((q) => `<li>Q${q.number}: ${esc(q.note)}</li>`).join("")}</ul>`);
     if (d.time?.length) blocks.push(`<h2>${t.time}</h2><p>${d.time.map((x) => `${esc(x.section)}: ${x.minutes ?? "?"} min, ${x.lost} lost`).join(" · ")}</p>`);
   }
+  let lostBox = "";
   if (d.lost) {
     const total = d.lost.reduce((x, l) => x + l.marks, 0);
-    blocks.unshift(
+    lostBox =
       total
         ? `<div class="lost"><h2>${esc(t.lostTitle(total))}</h2><table>${d.lost
             .map((l) => `<tr><td class="lm">${l.marks}</td><td><b>${esc(l.tag === "other" ? t.other : (t.tags[l.tag] ?? l.tag))}</b><br><span class="muted">${t.lostQ}: ${l.questions.map((q) => "Q" + esc(q)).join(", ")}</span></td></tr>`)
             .join("")}</table></div>`
-        : `<p class="muted">${t.allFull}</p>`,
-    );
+        : `<p class="muted">${t.allFull}</p>`;
+    // With the chart, the box sits under it (beside the long chapter table); otherwise it leads the blocks
+    if (!radar) blocks.unshift(lostBox);
   }
   blocks.push(`<div class="book"><b>${esc(t.book)}</b> ${esc(d.contact ?? "")}</div>`);
   if (d.corrections.length) blocks.push(`<p class="muted"><b>${t.correction}:</b> ${d.corrections.map((c) => esc(c.note)).join(" ")}</p>`);
@@ -161,7 +176,11 @@ export function reportHtml(d: ReportData, audience: Audience, s: Settings, compa
 <p class="muted">${esc(s["brand.tuitionName"])} · Class ${d.student.klass} ${esc(d.student.board)} · ${esc(d.paper.subject)} · ${esc(d.paper.id)}</p>
 <p><b>${esc(d.framing.headline)}.</b> ${esc(d.framing.tone)}</p>
 <div class="row"><div class="box"><b>${t.total}:</b> ${d.totals.got}/${d.totals.max} (${d.totals.pct}%)</div><div class="box"><b>${t.trend}:</b> ${esc(trendLine)}</div></div>
-<h2>${t.chapter}</h2><table><tr><th>${t.chapter}</th><th>${t.marks}</th><th></th><th>%</th><th>${t.band}</th></tr>${rows}</table>
+<h2>${t.chapter}</h2>${
+    radar
+      ? `<div class="row glance"><div style="flex:1"><table><tr><th>${t.chapter}</th><th>${t.marks}</th><th>%</th><th>${t.band}</th></tr>${slim}</table></div><div style="flex:1"><h3>${t.glance}</h3>${radar}<p class="muted key">${esc(t.glanceKey(rings.map((r) => `${r}%`).join(", ")))}</p>${lostBox}</div></div>`
+      : `<table><tr><th>${t.chapter}</th><th>${t.marks}</th><th></th><th>%</th><th>${t.band}</th></tr>${rows}</table>`
+  }
 ${blocks.join("")}`;
   return pageHtml({ title: `${d.paper.id} report`, lang: d.lang, onePage: true, scale, body, footer: `Reply STOP to stop receiving these. · ${esc(s["brand.referralLine"])}` });
 }
@@ -188,6 +207,16 @@ export async function generateReports(paperId: string) {
   if (!["marked", "reported"].includes(paper.status)) throw new EpError("Finish marking first (the paper must be marked).");
   const subs = await epdb.submission.findMany({ where: { paperId, isCurrent: true, NOT: { flags: { has: "late_no_report" } } }, include: { student: { include: { parents: true } } } });
   let created = 0;
+  if (paper.uploadOnly) {
+    for (const sub of subs) {
+      try {
+        if ((await makeSheetReport(sub.id)) === "created") created++;
+      } catch {
+        /* not fully marked yet: its report comes when marking is complete */
+      }
+    }
+    return { created, total: await epdb.reportCard.count({ where: { paperId } }) };
+  }
   for (const sub of subs) created += await sheetReports(sub, paper, s);
   return { created, total: await epdb.reportCard.count({ where: { paperId } }) };
 }
@@ -220,6 +249,78 @@ async function sheetReports(sub: { student: { id: string; code: string; status: 
 }
 
 // ------------------------------ one sheet at a time (uploaded papers marked row by row) ------------------------------
+// One report per sheet (audience "student", sent to the parent's verified WhatsApp as all student
+// reports are): the one-page marks analysis from services/sheet-report.ts. It is made automatically
+// the moment the last answer is marked, rebuilt when marks change (until it is sent), and can be
+// discarded, regenerated or sent from Reports. Never any worked solutions or AI-written content.
+
+/** Renders a sheet report to PDF, shrinking until it fits one page. */
+async function renderSheetPdf(d: import("./sheet-report").SheetReportData, rel: string) {
+  const { sheetReportHtml } = await import("./sheet-report");
+  let bytes = await pdf.fromHtml(await sheetReportHtml(d));
+  for (const scale of [0.92, 0.85, 0.78, 0.7]) {
+    if ((await pageCount(bytes)) <= 1) break;
+    bytes = await pdf.fromHtml(await sheetReportHtml(d, scale));
+  }
+  await storage.save(rel, bytes);
+}
+
+/**
+ * Makes (or, while unsent, rebuilds) the report of one fully marked sheet. A discarded report stays
+ * discarded unless `restore` (the Regenerate button). Returns what happened.
+ */
+export async function makeSheetReport(submissionId: string, o: { restore?: boolean } = {}): Promise<"created" | "rebuilt" | "kept"> {
+  const s = await getSettings();
+  const sub = await markedSheet(submissionId);
+  if (sub.student.status === "opted_out") return "kept";
+  const { sheetReportData } = await import("./sheet-report");
+  const key = { studentId_paperId_audience_parentId: { studentId: sub.studentId, paperId: sub.paperId, audience: "student", parentId: STUDENT_KEY } };
+  const rc = await epdb.reportCard.findUnique({ where: key });
+  if (rc && (rc.status === "sent" || (rc.status === "discarded" && !o.restore))) return "kept";
+  const d = await sheetReportData(submissionId, s);
+  const rel = rc?.pdfPath ?? `reports/${sub.paperId}/${sub.student.code}-report.pdf`;
+  await renderSheetPdf(d, rel);
+  if (rc) {
+    // A changed report goes back to review: anything queued for the old one is withdrawn
+    await epdb.message.deleteMany({ where: { dedupeKey: `report:${rc.id}`, status: { not: "sent" } } });
+    await epdb.reportCard.update({ where: { id: rc.id }, data: { data: d as never, status: "draft", channel: null, error: null, attempts: 0 } });
+    await audit({ action: "report.rebuilt", entity: "ReportCard", entityId: rc.id, old: { status: rc.status } });
+    return "rebuilt";
+  }
+  try {
+    const made = await epdb.reportCard.create({ data: { studentId: sub.studentId, paperId: sub.paperId, audience: "student", parentId: STUDENT_KEY, language: "en", data: d as never, pdfPath: rel, status: "draft" } });
+    await audit({ action: "report.generated", entity: "ReportCard", entityId: made.id, new: { submissionId } });
+  } catch (e) {
+    if (!(e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002")) throw e; // made by a parallel save
+  }
+  return "created";
+}
+
+/** Reports > Discard: the report is set aside (not deleted) and isn't rebuilt by later mark changes. */
+export async function discardReport(reportId: string) {
+  const rc = await epdb.reportCard.findUniqueOrThrow({ where: { id: reportId } });
+  if (rc.status === "sent") throw new EpError("This report was already sent.");
+  await epdb.message.deleteMany({ where: { dedupeKey: `report:${reportId}`, status: { not: "sent" } } });
+  await epdb.reportCard.update({ where: { id: reportId }, data: { status: "discarded", channel: null } });
+  await audit({ action: "report.discarded", entity: "ReportCard", entityId: reportId, old: { status: rc.status } });
+}
+
+/**
+ * Reports > Send: approves this one report and runs delivery. Email goes out by itself when set up;
+ * otherwise it is queued for WhatsApp (open the chat, attach the PDF, then Mark sent).
+ */
+export async function sendReport(reportId: string) {
+  const rc = await epdb.reportCard.findUniqueOrThrow({ where: { id: reportId }, include: { student: { include: { parents: true } } } });
+  if (rc.status === "sent") throw new EpError("This report was already sent.");
+  if (rc.status === "discarded") throw new EpError("This report is discarded. Regenerate it first.");
+  if (!rc.student.parents.some((p) => parentReachable(p))) throw new EpError("The parent's WhatsApp number isn't verified (or consent is missing). Verify it on the student page first.");
+  await epdb.reportCard.update({ where: { id: reportId }, data: { status: "ready", attempts: 0 } });
+  await audit({ action: "report.approved", entity: "ReportCard", entityId: reportId, old: { status: rc.status } });
+  await deliverReports();
+  const after = await epdb.reportCard.findUniqueOrThrow({ where: { id: reportId } });
+  const msg = await epdb.message.findFirst({ where: { dedupeKey: `report:${reportId}` } });
+  return { status: after.status, channel: after.channel, waLink: msg?.waLink ?? null };
+}
 
 async function markedSheet(submissionId: string) {
   const sub = await epdb.submission.findUnique({ where: { id: submissionId }, include: { paper: true, rowMarks: true, student: { include: { parents: true } } } });
@@ -232,21 +333,17 @@ async function markedSheet(submissionId: string) {
   return sub;
 }
 
-/** Draft reports (student + each reachable parent) for one fully marked sheet. */
+/** The sheet's report (made automatically once marking is complete; this is the manual fallback). */
 export async function generateSheetReports(submissionId: string) {
-  const s = await getSettings();
   const sub = await markedSheet(submissionId);
-  const created = await sheetReports(sub, sub.paper, s);
-  await audit({ action: "report.generated", entity: "Submission", entityId: submissionId, new: { created } });
-  return { created, parents: sub.student.parents.filter((p) => parentReachable(p)).length };
+  const r = await makeSheetReport(submissionId, { restore: true });
+  return { created: r === "kept" ? 0 : 1, parents: sub.student.parents.filter((p) => parentReachable(p)).length };
 }
 
-/** After a marks change: rebuilds this sheet's unsent reports from the current marks. */
+/** After a marks change: rebuilds this sheet's unsent report from the current marks. */
 export async function refreshSheetReports(submissionId: string) {
-  const sub = await markedSheet(submissionId);
-  const rcs = await epdb.reportCard.findMany({ where: { studentId: sub.studentId, paperId: sub.paperId, status: { not: "sent" } } });
-  for (const rc of rcs) await regenerateReport(rc.id);
-  return rcs.length;
+  const r = await makeSheetReport(submissionId);
+  return r === "rebuilt" || r === "created" ? 1 : 0;
 }
 
 /** The teacher approved this sheet's reports: ready, and queued for sending straight away. */
@@ -345,10 +442,25 @@ export async function forceResend(reportId: string) {
   await audit({ action: "report.force_resend", entity: "ReportCard", entityId: reportId, old: { status: rc.status } });
 }
 
-/** Regenerates one report's PDF (after a correction), keeping its row. */
+/** Regenerates one report's PDF (after a correction), keeping its row. A discarded report comes back for review. */
 export async function regenerateReport(reportId: string) {
   const s = await getSettings();
   const rc = await epdb.reportCard.findUniqueOrThrow({ where: { id: reportId } });
+  const paper = await epdb.paper.findUniqueOrThrow({ where: { id: rc.paperId } });
+  if (paper.uploadOnly && rc.audience === "student") {
+    const sub = await epdb.submission.findFirst({ where: { studentId: rc.studentId, paperId: rc.paperId, isCurrent: true } });
+    if (!sub) throw new EpError("The answer sheet for this report is gone.");
+    if (rc.status === "sent") {
+      // Force resend after a correction: rebuild the PDF but keep it marked sent until resent
+      const { sheetReportData } = await import("./sheet-report");
+      const d = await sheetReportData(sub.id, s);
+      await renderSheetPdf(d, rc.pdfPath!);
+      await epdb.reportCard.update({ where: { id: reportId }, data: { data: d as never } });
+      return;
+    }
+    await makeSheetReport(sub.id, { restore: true });
+    return;
+  }
   const d = await reportData(rc.studentId, rc.paperId, rc.audience as Audience, rc.language as "en" | "hi", s);
   await renderPdf(d, rc.audience as Audience, s, rc.pdfPath!);
   await epdb.reportCard.update({ where: { id: reportId }, data: { data: d as never } });

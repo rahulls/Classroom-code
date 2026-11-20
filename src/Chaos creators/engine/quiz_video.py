@@ -796,6 +796,9 @@ def draw_q_tall(img, seg, tt):
     S.rounded_rectangle([60, top, 1020, top + ch], 44, fill=(255, 255, 255, int(255 * k)))
     for i, ln in enumerate(lines):
         S.text((540, top + 55 + i * F_Q.size * 1.2), ln, font=F_Q, fill=INK + (int(255 * k),), anchor="ma")
+    if S is d:
+        # Top-right, between the progress bar and the card, clear of the "QUESTION n" pill and the text
+        paste_sticker(img, seg["idx"], 925, top - 60, 190, k)
     revealed = tt >= seg["reveal"]
     rk = ease((tt - seg["reveal"]) / 0.35)
     oy = top + ch + 60 - off
@@ -1147,10 +1150,79 @@ def _segment(tt):
     return None
 
 
+# ---------- one picture per question (settings.question_images) ----------
+# {"mode": "background" | "sticker", "files": [path or null per question]}: e.g. Canva art about each
+# question. Loaded once per question and kept, and drawn into the cached still frame, so the cost
+# per frame is the same as without pictures.
+def _q_images():
+    qi = G["CFG"].get("question_images") or {}
+    return qi.get("mode"), qi.get("files") or []
+
+
+def q_background(idx):
+    """The background for question idx: its own picture in "background" mode, else the usual one."""
+    mode, files = _q_images()
+    if mode != "background" or idx is None or idx >= len(files) or not files[idx]:
+        return G["BG"]
+    cache = G.setdefault("QBG", {})
+    if idx not in cache:
+        img = load_bg(G["W"], G["H"], files[idx], 85).filter(ImageFilter.GaussianBlur(2))
+        # A dark veil keeps the white question card and options readable: stronger on bright pictures
+        lum = float(np.asarray(img.convert("L").resize((64, 64)), np.float32).mean())
+        cache[idx] = Image.blend(img, Image.new("RGB", img.size, (12, 8, 30)), min(0.6, 0.35 + max(0.0, lum - 60) / 200))
+    return cache[idx]
+
+
+def q_sticker(idx, size):
+    """Question idx's picture as a framed, tilted sticker (RGBA), or None."""
+    mode, files = _q_images()
+    if mode != "sticker" or idx is None or idx >= len(files) or not files[idx]:
+        return None
+    cache = G.setdefault("QST", {})
+    if (idx, size) not in cache:
+        try:
+            src = Image.open(files[idx]).convert("RGB")
+        except Exception as e:
+            print(f"[q-images] {files[idx]}: {e}", flush=True)
+            cache[(idx, size)] = None
+            return None
+        side = min(src.size)
+        src = src.crop(((src.width - side) // 2, (src.height - side) // 3, (src.width - side) // 2 + side, (src.height - side) // 3 + side))
+        b = max(6, size // 26)
+        inner = src.resize((size - 2 * b, size - 2 * b), Image.LANCZOS)
+        card = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        m = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(m).rounded_rectangle([0, 0, size - 1, size - 1], size // 9, fill=255)
+        card.paste((255, 255, 255, 255), (0, 0), m)
+        mi = Image.new("L", inner.size, 0)
+        ImageDraw.Draw(mi).rounded_rectangle([0, 0, inner.width - 1, inner.height - 1], size // 12, fill=255)
+        card.paste(inner, (b, b), mi)
+        rot = card.rotate(-7 if idx % 2 else 7, resample=Image.BICUBIC, expand=True)
+        sh = Image.new("RGBA", rot.size, (0, 0, 0, 0))
+        sh.putalpha(rot.getchannel("A").point(lambda v: int(v * 0.5)).filter(ImageFilter.GaussianBlur(10)))
+        out = Image.new("RGBA", (rot.width + 16, rot.height + 16), (0, 0, 0, 0))
+        out.alpha_composite(sh, (12, 14))
+        out.alpha_composite(rot, (0, 0))
+        cache[(idx, size)] = out
+    return cache[(idx, size)]
+
+
+def paste_sticker(img, idx, cx, cy, size, k):
+    st = q_sticker(idx, size)
+    if st is None or k <= 0:
+        return
+    if k < 1:
+        st = st.resize((max(1, int(st.width * (0.6 + 0.4 * k))), max(1, int(st.height * (0.6 + 0.4 * k)))), Image.LANCZOS)
+        a = st.getchannel("A").point(lambda v: int(v * k))
+        st = st.copy()
+        st.putalpha(a)
+    composite(img, st, int(cx - st.width / 2), int(cy - st.height / 2))
+
+
 def frame(tt):
     seg = _segment(tt)
     kind = seg["kind"] if seg else "q"
-    img = G.get("BG_" + kind, G["BG"]).copy()
+    img = (q_background(seg["idx"]) if seg and kind == "q" else G.get("BG_" + kind, G["BG"])).copy()
     G["DIM"] = G.get("DIM_" + kind, 130)
     G["PARTS"] = "all"
     if seg:
@@ -1165,7 +1237,7 @@ def frame_bytes(tt):
     if key is None:
         return frame(tt).tobytes()
     if G.get("cache_key") != key:
-        base = G["BG"].copy()
+        base = q_background(seg["idx"]).copy()
         G["PARTS"] = "static"
         G["draw"]["q"](base, seg, tt)
         G["cache_key"], G["cache_img"], G["cache_bytes"] = key, base, base.tobytes() if key[0] == "ask" else None
@@ -1231,6 +1303,9 @@ def main(job_dir):
     seed = str(cfg.get("seed") or job.dir.name)
     tpl = pick_templates(cfg, fmt_name, seed)
     print(f"[templates] {tpl or 'built-in'}", flush=True)
+    # Canva designs (thumbnail + intro / ending artwork) are being made by the web app while the
+    # narration is recorded; they are picked up below. Any that fail fall back to the normal pictures.
+    use_canva = bool(cfg.get("canva"))
     sounds = Sounds(cfg, seed)
     ranks = rank_list(cfg, fmt_name)
     bands = rank_bands(len(qs), ranks) if ranks else []
@@ -1244,6 +1319,19 @@ def main(job_dir):
     wav = job.dir / "audio.wav"
     sf.write(str(wav), mix, SR)
     del mix
+
+    if use_canva:
+        import canva_images
+        st = canva_images.wait_done(job.dir, tick=lambda s: job.progress("voice", len(qs) + 2, len(qs) + 2, f"Waiting for Canva's designs ({int(s)} s)"))
+        print(f"[canva] status: {st}", flush=True)
+        found = canva_images.screens(job.dir, fmt_name) if st else {}
+        if found:
+            tpl.update(found)
+            print(f"[canva] intro/ending: {found}", flush=True)
+        qfiles = canva_images.question_files(job.dir, len(qs)) if st else []
+        if any(qfiles):
+            cfg["question_images"] = {"mode": "background", "files": qfiles}
+            print(f"[canva] question backgrounds: {sum(1 for f in qfiles if f)}/{len(qs)}", flush=True)
 
     FF = ffmpeg_exe()
     lay = LAYOUTS[fmt_name]
@@ -1290,11 +1378,18 @@ def main(job_dir):
     chapters = [dict(t=round(e["start"], 1), kind=e["kind"], q=e.get("idx")) for e in events]
     # A first thumbnail design (the page can make new ones). Never fails the video.
     job.progress("finish", nf, nf, "Designing the thumbnail", force=True)
-    try:
-        import thumbnail
-        thumbnail.design(job.dir)
-    except Exception:
-        print("[thumbnail] " + traceback.format_exc(), flush=True)
+    canva_thumb = False
+    if use_canva:
+        try:
+            canva_thumb = canva_images.make_thumbnail(job.dir)
+        except Exception:
+            print("[canva] thumbnail: " + traceback.format_exc(), flush=True)
+    if not canva_thumb:
+        try:
+            import thumbnail
+            thumbnail.design(job.dir)
+        except Exception:
+            print("[thumbnail] " + traceback.format_exc(), flush=True)
     meta = dict(duration=round(total, 1), questions=len(qs), width=lay["W"], height=lay["H"], format=fmt_name,
                 render_seconds=round(time.time() - job.started, 1), chapters=chapters,
                 templates={k: pathlib.Path(v).parent.name for k, v in tpl.items()}, sounds=sounds.used,

@@ -23,7 +23,7 @@ const LONG_COUNTS = [50, 100, 150];
 const SHORT_COUNTS = [5, 10, 15];
 
 /** Upload + preview the questions CSV, choose the format and style, then create the video. */
-export function Studio({ busy, claudeKey }: { busy: boolean; claudeKey: boolean }) {
+export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: boolean; canva: boolean }) {
   const [csv, setCsv] = useState("");
   const [fileName, setFileName] = useState("");
   const [readError, setReadError] = useState("");
@@ -325,6 +325,7 @@ export function Studio({ busy, claudeKey }: { busy: boolean; claudeKey: boolean 
             )}
           </div>
         )}
+        <CanvaDesigns connected={canva} questions={used.length} />
       </section>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -524,6 +525,41 @@ function Generator({ hasKey, onCsv, csv, fileName }: { hasKey: boolean; onCsv: (
       {made && csv && fileName === made && (
         <a className="mt-1 inline-block text-sm text-accent hover:underline" download={made} href={`data:text/csv;charset=utf-8,${encodeURIComponent("﻿" + csv)}`}>
           Download this CSV (to edit it in Excel or keep it)
+        </a>
+      )}
+    </div>
+  );
+}
+
+/** "Canva designs": Canva's AI makes the thumbnail and the intro / ending artwork while the video is made. */
+function CanvaDesigns({ connected, questions }: { connected: boolean; questions: number }) {
+  const [on, setOn] = useState(connected);
+  const [perQuestion, setPerQuestion] = useState(true);
+  const tooMany = questions > 25;
+  return (
+    <div className="mt-4 rounded-lg border border-line p-3">
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" name="canva" value="1" checked={on && connected} disabled={!connected} onChange={(e) => setOn(e.target.checked)} />
+        🎨 Canva designs: thumbnail, intro and ending made by Canva&apos;s AI
+      </label>
+      <p className="mt-1 text-xs text-muted">
+        Designed about the topic while the narration is recorded (adds 1–2 minutes). The thumbnail is sized for YouTube with the search keyword biggest; the intro and ending are
+        artwork with the titles written on top. Every design is also saved in your Canva folder. If Canva fails, the normal pictures are used.
+      </p>
+      {connected && on && (
+        <label className="mt-2 flex items-center gap-2 text-sm">
+          <input type="checkbox" name="canvaQuestions" value="1" checked={perQuestion && !tooMany} disabled={tooMany} onChange={(e) => setPerQuestion(e.target.checked)} />
+          Canva picture behind every question{" "}
+          <span className="text-xs text-muted">
+            {tooMany
+              ? `(only for videos of up to 25 questions; this one has ${questions})`
+              : `(Claude writes a prompt per question that never hints at the answer; adds about ${Math.max(2, Math.ceil(Math.max(questions, 1) / 4) * 2)} minutes)`}
+          </span>
+        </label>
+      )}
+      {!connected && (
+        <a href="/chaos/canva/connect?back=/chaos" className="btn mt-2 inline-block text-sm">
+          Connect Canva
         </a>
       )}
     </div>

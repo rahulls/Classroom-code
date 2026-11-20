@@ -4,6 +4,7 @@ import { deleteVideoAction } from "@/modules/chaos/actions";
 import { FORMATS, fmtDuration } from "@/modules/chaos/csv";
 import { claudeKeyStatus } from "@/modules/chaos/generate";
 import { engineReady, isRunning, listJobs, type JobView } from "@/modules/chaos/jobs";
+import { canvaConnection } from "@/modules/chaos/canva";
 import { Studio } from "./studio";
 
 export const metadata = { title: "Studio" };
@@ -22,7 +23,7 @@ export default async function ChaosStudioPage() {
           <b className="text-warn">“{busy.title}” is being made ({Math.round(busy.status.percent)}%).</b> Open it to watch the progress →
         </Link>
       )}
-      <Studio busy={!!busy} claudeKey={claudeKeyStatus().ok} />
+      <Studio busy={!!busy} claudeKey={claudeKeyStatus().ok} canva={canvaConnection().connected} />
 
       <section className="mt-8">
         <h2 className="mb-3 flex items-baseline gap-3 text-lg font-semibold text-[#2a1260]">
