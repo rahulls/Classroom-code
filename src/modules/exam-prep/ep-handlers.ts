@@ -8,7 +8,7 @@ import { epdb } from "./db";
 import { tick } from "./jobs";
 import { attachPaper, completeTask, draftPaperPosts, draftPrivateReminder, generateCalendar } from "./services/calendar";
 import { addAttendee, addDoubt, answerDoubt, createSession, recordPayment, setAttendance, setOfferStatus, startPlan, suggestOffers } from "./services/commerce";
-import { markPaperMarked, proposeWithAi, recordSpotCheck, reviewMark, selectSpotCheck, setMark, enterSelfMarks } from "./services/marking";
+import { markPaperMarked, proposeWithAi, recordSpotCheck, reviewMark, selectSpotCheck, setMark, setMarks, enterSelfMarks } from "./services/marking";
 import { markMessageSent, validateTemplate } from "./services/messaging";
 import { logHours, recordFeedback } from "./services/metrics";
 import { addPendingStudent, addStudent, importIntakeCsv, markVerified, optOut, recordConsent, updateStudent, welcomeFor } from "./services/people";
@@ -355,6 +355,21 @@ export const reviewAction = epAction(z.object({ markId: id, action: z.enum(["acc
 export const setMarkAction = epAction(z.object({ submissionId: id, questionId: id, marks: z.coerce.number(), errorTag: z.string().default("none"), note: z.string().max(300).optional() }), async (v) => {
   await setMark(v.submissionId, v.questionId, v.marks, v.errorTag as never, v.note || undefined);
   return done(v.note ? "Corrected; the next report will mention it." : "Saved.");
+});
+
+const TAG_SET = ["none", "concept", "calculation", "missing_steps", "misread"];
+/** Marking grid: fields m<number> (marks, blank = skip) and t<number> (error type). */
+export const markGridAction = epAction(z.object({ submissionId: id }).catchall(z.string()), async (v) => {
+  const entries = Object.keys(v)
+    .filter((k) => /^m\d+$/.test(k) && String(v[k]).trim() !== "")
+    .map((k) => {
+      const n = Number(k.slice(1));
+      const tag = String(v[`t${n}`] ?? "none");
+      return { number: n, marks: Number(v[k]), errorTag: (TAG_SET.includes(tag) ? tag : "none") as never };
+    });
+  if (!entries.length) throw new EpError("Type at least one mark.");
+  await setMarks(v.submissionId, entries);
+  return done(`Saved marks for ${entries.length} question${entries.length === 1 ? "" : "s"}.`);
 });
 
 export const selfMarksAction = epAction(z.object({ submissionId: id, marks: z.string() }), async (v) => {

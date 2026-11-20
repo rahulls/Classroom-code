@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { aiAction, markedAction, selfMarksAction, setMarkAction, spotRecordAction, spotSelectAction } from "@/modules/exam-prep/actions";
+import { aiAction, markGridAction, markedAction, selfMarksAction, setMarkAction, spotRecordAction, spotSelectAction } from "@/modules/exam-prep/actions";
 import { signedLink } from "@/modules/exam-prep/adapters/storage";
 import { epdb } from "@/modules/exam-prep/db";
 import { calibration, enteredTotal, spotCheckSummary } from "@/modules/exam-prep/services/marking";
@@ -19,7 +19,8 @@ export default async function MarkingPage({ params, searchParams }: { params: Pr
   const s = await getSettings();
   const subs = await epdb.submission.findMany({ where: { paperId, isCurrent: true }, include: { student: true, marks: true, selfMarks: true }, orderBy: { student: { code: "asc" } } });
   const onlyReview = sp.all !== "1";
-  const queue = subs.filter((x) => !onlyReview || x.marks.some((m) => m.needsReview));
+  const unmarkedIn = (x: (typeof subs)[number]) => paper.items.some((i) => !x.marks.some((m) => m.questionId === i.questionId));
+  const queue = subs.filter((x) => !onlyReview || x.marks.some((m) => m.needsReview) || unmarkedIn(x));
   const current = subs.find((x) => x.id === sp.sheet) ?? queue[0];
   const [spot, spotSum, cal] = await Promise.all([epdb.spotCheck.findMany({ where: { paperId }, include: { submission: { include: { student: true } } } }), spotCheckSummary(paperId), calibration()]);
   const spotRows = await Promise.all(spot.map(async (x) => ({ ...x, entered: await enteredTotal(x.submissionId) })));
@@ -91,7 +92,63 @@ export default async function MarkingPage({ params, searchParams }: { params: Pr
           <p className="text-sm">
             <b>{current.student.code}</b> {current.student.name} · {current.marks.reduce((a, m) => a + m.marksAwarded, 0)} / {paper.items.reduce((a, i) => a + i.question.marks, 0)}
           </p>
-          <ReviewPanel sheetUrl={signedLink(sheetPath)} items={items} student={current.student.code} key={current.id} />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <iframe src={signedLink(sheetPath)} title={`Answer sheet ${current.student.code}`} className="h-[85vh] w-full rounded-lg border border-line bg-white lg:sticky lg:top-2" />
+            <EpForm action={markGridAction} className="card space-y-2 text-sm" key={current.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <b>Mark this sheet</b>
+                <span className="text-xs text-muted">Type marks for each question (blank = not marked yet). Error type only matters where marks were lost.</span>
+              </div>
+              <input type="hidden" name="submissionId" value={current.id} />
+              <div className="max-h-[70vh] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-[var(--card,white)]">
+                    <tr className="text-left text-muted">
+                      <th className="py-1">Q</th>
+                      <th>Chapter</th>
+                      <th className="text-right">Max</th>
+                      <th className="text-right">Marks</th>
+                      <th>Where lost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paper.items.map((it) => {
+                      const m = current.marks.find((x) => x.questionId === it.questionId);
+                      return (
+                        <tr key={it.questionId} className={`border-t border-line ${m?.needsReview ? "bg-bad/10" : ""}`}>
+                          <td className="py-1 font-semibold">
+                            {it.number}
+                            {it.question.orText ? <span className="ml-1 text-[10px] text-muted">A/B</span> : null}
+                          </td>
+                          <td className="max-w-[12rem] truncate" title={it.question.text}>
+                            {it.question.chapter}
+                          </td>
+                          <td className="text-right">{it.question.marks}</td>
+                          <td className="text-right">
+                            <input name={`m${it.number}`} type="number" min={0} max={it.question.marks} step={0.5} defaultValue={m?.marksAwarded ?? ""} className="input w-16 px-1 py-0.5 text-right" aria-label={`Marks for question ${it.number}`} />
+                          </td>
+                          <td>
+                            <select name={`t${it.number}`} defaultValue={m?.errorTag ?? "none"} className="input w-auto px-1 py-0.5 text-xs" aria-label={`Where marks were lost on question ${it.number}`}>
+                              {["none", "concept", "calculation", "missing_steps", "misread"].map((t) => (
+                                <option key={t} value={t}>
+                                  {t === "none" ? "-" : t.replace("_", " ")}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center gap-2">
+                <Submit>Save marks</Submit>
+                <Msg />
+              </div>
+            </EpForm>
+          </div>
+          {items.some((x) => x.needsReview || x.aiProposed != null) && <ReviewPanel sheetUrl={signedLink(sheetPath)} items={items} student={current.student.code} key={current.id} />}
           <div className="grid gap-4 lg:grid-cols-2">
             <EpForm action={setMarkAction} className="card flex flex-wrap items-end gap-2 text-sm">
               <b className="w-full">Enter or correct a mark</b>

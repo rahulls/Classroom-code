@@ -162,6 +162,10 @@ export async function setMarkAction(prev: EpResult, fd: FormData): Promise<EpRes
   return h.setMarkAction(prev, fd);
 }
 
+export async function markGridAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.markGridAction(prev, fd);
+}
+
 export async function selfMarksAction(prev: EpResult, fd: FormData): Promise<EpResult> {
   return h.selfMarksAction(prev, fd);
 }

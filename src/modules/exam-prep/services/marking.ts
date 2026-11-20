@@ -106,6 +106,35 @@ export async function setMark(submissionId: string, questionId: string, marks: n
   return m;
 }
 
+/**
+ * The teacher marks a whole sheet at once (marking grid). Blank entries are skipped. Every value is
+ * checked before anything is saved, so one bad entry changes nothing.
+ */
+export async function setMarks(submissionId: string, entries: { number: number; marks: number; errorTag?: ErrorTag }[]) {
+  const sub = await epdb.submission.findUniqueOrThrow({ where: { id: submissionId }, include: { paper: { include: { items: { include: { question: true } } } } } });
+  const plan = entries.map((e) => {
+    const it = sub.paper.items.find((i) => i.number === e.number);
+    if (!it) throw new EpError(`Q${e.number} is not on this paper.`);
+    if (!Number.isFinite(e.marks) || e.marks < 0 || e.marks > it.question.marks) throw new EpError(`Q${e.number}: marks must be between 0 and ${it.question.marks}.`);
+    if (Math.round(e.marks * 2) !== e.marks * 2) throw new EpError(`Q${e.number}: use whole or half marks.`);
+    return { it, marks: e.marks, errorTag: e.errorTag ?? "none" };
+  });
+  for (const p of plan) {
+    const questionId = p.it.questionId;
+    const old = await epdb.mark.findUnique({ where: { submissionId_questionId: { submissionId, questionId } } });
+    if (old && old.marksAwarded === p.marks && old.errorTag === (p.marks >= p.it.question.marks ? "none" : p.errorTag) && !old.needsReview) continue;
+    const tag = p.marks >= p.it.question.marks ? "none" : p.errorTag;
+    const m = await epdb.mark.upsert({
+      where: { submissionId_questionId: { submissionId, questionId } },
+      create: { submissionId, questionId, marksAwarded: p.marks, source: "teacher", errorTag: tag, reviewedAt: new Date() },
+      update: { marksAwarded: p.marks, source: "teacher", errorTag: tag, needsReview: false, reviewedAt: new Date() },
+    });
+    await audit({ action: old ? "mark.changed" : "mark.entered", entity: "Mark", entityId: m.id, old: old ? { marks: old.marksAwarded, source: old.source } : null, new: { marks: p.marks, source: "teacher", errorTag: tag } });
+  }
+  if (await epdb.rankRecord.count({ where: { paperId: sub.paperId } })) await computeRanks(sub.paperId);
+  return plan.length;
+}
+
 /** Self-entered marks (fallback): stored separately, never used as the final mark. */
 export async function enterSelfMarks(submissionId: string, marks: Record<string, number>) {
   for (const [questionId, v] of Object.entries(marks)) {

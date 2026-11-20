@@ -8,7 +8,7 @@ import { epdb } from "../db";
 import { addSubmission } from "../services/submissions";
 import { attachPaper, draftPrivateReminder, generateCalendar, missing, weeklyTasks } from "../services/calendar";
 import { recordPayment, startPlan, suggestOffers } from "../services/commerce";
-import { setMark, proposeWithAi, calibration, reviewMark } from "../services/marking";
+import { setMark, setMarks, proposeWithAi, calibration, reviewMark } from "../services/marking";
 import { DEFAULT_TEMPLATES, draft, validateTemplate, seedTemplates } from "../services/messaging";
 import { recordFeedback, feedbackSummary, metrics } from "../services/metrics";
 import { addStudent, importIntakeCsv, IntakeSchema, markVerified, optOut, parentReachable } from "../services/people";
@@ -227,6 +227,18 @@ describe("R5 marking", () => {
     const c = await calibration();
     expect(c.questions).toBe(2);
     expect(c.agreement).toBe(50);
+  });
+  it("the marking grid saves a whole sheet at once; one bad entry saves nothing", async () => {
+    const st = await student();
+    const p = await smallPaper();
+    const sub = await addSubmission({ studentId: st.id, paperId: p.id, files: [{ name: "x.pdf", bytes: await fakeSheet() }], source: "form" });
+    const written = p.items.filter((i) => i.question.type !== "mcq").map((i) => i.number);
+    await expect(setMarks(sub.id, [{ number: written[0]!, marks: 3 }, { number: written[1]!, marks: 9 }])).rejects.toThrow(/between 0 and 4/);
+    expect(await epdb.mark.count({ where: { submissionId: sub.id, source: "teacher" } })).toBe(0);
+    await setMarks(sub.id, [{ number: written[0]!, marks: 3, errorTag: "calculation" }, { number: written[1]!, marks: 4, errorTag: "concept" }]);
+    const marks = await epdb.mark.findMany({ where: { submissionId: sub.id, source: "teacher" } });
+    expect(marks.map((m) => [m.marksAwarded, m.errorTag]).sort()).toEqual([[3, "calculation"], [4, "none"]]);
+    expect(await epdb.auditLog.count({ where: { entity: "Mark", action: "mark.entered" } })).toBe(2);
   });
 });
 
