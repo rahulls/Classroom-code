@@ -6,7 +6,6 @@ const isProd = process.env.NODE_ENV === "production";
 // is set in src/middleware.ts.
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "no-referrer" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
@@ -28,7 +27,12 @@ const nextConfig: NextConfig = {
     middlewareClientMaxBodySize: "12mb",
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Exam Prep's marking screen frames the answer-sheet PDF from its own origin; everything else is never framed
+      { source: "/((?!exam-prep).*)", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
+      { source: "/exam-prep/:path*", headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }] },
+    ];
   },
 };
 

@@ -31,6 +31,8 @@ export function middleware(req: NextRequest) {
     "form-action 'self'",
     ...(dev || IS_LOOPBACK ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
+  // A private file (a PDF shown in the marking frame) gets only the framing rule: the page CSP breaks the browser's PDF viewer
+  const fileCsp = req.nextUrl.pathname.startsWith("/exam-prep/files") ? "frame-ancestors 'self'" : null;
 
   const path = req.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
@@ -48,7 +50,7 @@ export function middleware(req: NextRequest) {
   requestHeaders.set("content-security-policy", csp);
 
   const res = NextResponse.next({ request: { headers: requestHeaders } });
-  res.headers.set("Content-Security-Policy", csp);
+  res.headers.set("Content-Security-Policy", fileCsp ?? csp);
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
