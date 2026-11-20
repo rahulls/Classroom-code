@@ -119,9 +119,23 @@ export default async function PapersPage() {
             <Field label="Total marks" hint="For an uploaded paper (taken from the marking format if blank)">
               <input name="totalMarks" type="number" min={1} step={0.5} className="input" />
             </Field>
-            <Field label="Paper file" hint="PDF or CSV (you can add it later too)">
+            <Field label="Question paper" hint="PDF (you can add it later too)">
               <input name="file" type="file" accept=".pdf,.csv" className="input" />
             </Field>
+            <Field label="Paper details (CSV)" hint="The paper's questions CSV (number, section, chapter, marks, OR columns): builds the marking board and the chapter analysis">
+              <input name="details" type="file" accept=".csv,.txt" className="input" />
+            </Field>
+            <p className="self-end text-xs text-muted sm:col-span-2">
+              Same CSV as for building question by question (
+              <a href="/exam-prep/templates?kind=questions" className="text-accent hover:underline">
+                template
+              </a>
+              ). A short answer list also works (
+              <a href="/exam-prep/templates?kind=format-template" className="text-accent hover:underline">
+                example
+              </a>
+              ). Skip it and the class&apos;s marking format is used.
+            </p>
             <div className="self-end">
               <Submit>Create</Submit>
             </div>

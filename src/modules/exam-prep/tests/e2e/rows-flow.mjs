@@ -1,7 +1,6 @@
 // End-to-end: uploaded PDF papers marked row by row, and questions imported from CSV, through the real
 // screens in Edge. Same test server as ui-flow.mjs (port 4313, test databases only), on an EMPTY test DB.
 //   node src/modules/exam-prep/tests/e2e/rows-flow.mjs [screenshot-dir]
-import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -113,6 +112,18 @@ try {
   await imp.locator("input[name=file]").setInputFiles(path.join(root, "design/sample-papers/cbse-class10-maths-practice-1.csv"));
   const r = await submitIn(imp, "Import");
   ok(/Imported 38 questions|is not in the chapter list/.test(r), `CSV import: ${r.slice(0, 120)}`);
+  console.log("uploaded paper + its questions CSV as paper details");
+  await go("/exam-prep/papers");
+  await newForm.locator("select[name=klass]").selectOption("10");
+  await newForm.locator("input[name=number]").fill("7");
+  await newForm.locator("select[name=mode]").selectOption("upload");
+  await newForm.locator("input[name=file]").setInputFiles(path.join(root, "design/sample-papers/cbse-class10-maths-practice-1-paper.pdf"));
+  await newForm.locator("input[name=details]").setInputFiles(path.join(root, "design/sample-papers/cbse-class10-maths-practice-1.csv"));
+  await newForm.getByRole("button", { name: "Create" }).click();
+  await page.waitForURL(/\/papers\/C10-MAT-P7-CBSE$/, { timeout: 120_000 });
+  ok(await page.getByText("53 rows · 80 marks · 9 OR choices").isVisible(), "board built from the questions CSV: 53 rows, 80 marks");
+  ok(!(await page.getByText(/have no chapter/).isVisible()), "every answer has its chapter");
+  await shot("3-details-from-questions-csv");
   const t = await page.request.get(`${BASE}/exam-prep/templates?kind=questions`);
   ok(t.status() === 200 && (await t.text()).includes("or_text"), "questions CSV template downloads");
   console.log("ALL PASSED");

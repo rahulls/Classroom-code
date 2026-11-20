@@ -274,3 +274,36 @@ describe("answer rows (uploaded papers)", async () => {
     expect(sheetScore(rows, [{ label: "1", marks: 1 }, { label: "3.B", marks: 2.5 }])).toEqual({ got: 3.5, max: 6, open: 1 });
   });
 });
+
+describe("paper details: chapter analysis", async () => {
+  const { parseAnswerRows, chapterBreakdown, chapterWeights, rowsTotal, NO_CHAPTER } = await import("../domain/answer-rows");
+  it("groups saved marks by chapter, weakest first, with where marks were lost; OR uses the attempted row", () => {
+    const { rows } = parseAnswerRows("1,1,A,Real Numbers\n2,2,B,Polynomials\n3.A,3,C,Real Numbers,3\n3.B,3,C,Polynomials,3\n4,1,A,");
+    const lines = chapterBreakdown(rows, [
+      { label: "1", marks: 1 },
+      { label: "2", marks: 1, errorTag: "calculation" },
+      { label: "3.B", marks: 1, errorTag: "concept" },
+      { label: "4", marks: 0 },
+    ]);
+    expect(lines.map((l) => [l.chapter, l.got, l.max])).toEqual([[NO_CHAPTER, 0, 1], ["Polynomials", 2, 5], ["Real Numbers", 1, 1]]);
+    expect(lines[1]!.lostBy).toEqual({ calculation: 1, concept: 2 });
+    expect(lines[0]!.lostBy).toEqual({ "not tagged": 1 });
+    expect(Object.fromEntries(chapterWeights(rows))).toEqual({ "Real Numbers": 4, Polynomials: 2, [NO_CHAPTER]: 1 });
+  });
+  it("the practice paper 1 questions CSV gives the marking board: 53 rows, 80 marks, every answer has a chapter in the NCERT list", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { NCERT } = await import("../seed/chapters");
+    const text = fs.readFileSync(path.resolve(__dirname, "../../../../design/sample-papers/cbse-class10-maths-practice-1.csv"), "utf8");
+    const { rows, errors } = parseAnswerRows(text);
+    expect(errors).toEqual([]);
+    expect(rows).toHaveLength(53);
+    expect(rowsTotal(rows)).toBe(80);
+    expect(rows.filter((r) => r.choice).map((r) => r.label)).toEqual(["21.A", "21.B", "22.A", "22.B", "28.A", "28.B", "31.A", "31.B", "34.A", "34.B", "35.A", "35.B", "36.iii.A", "36.iii.B", "37.iii.A", "37.iii.B", "38.iii.A", "38.iii.B"]);
+    expect(rows.filter((r) => r.label.startsWith("36")).map((r) => [r.label, r.max])).toEqual([["36.i", 1], ["36.ii", 1], ["36.iii.A", 2], ["36.iii.B", 2]]);
+    expect(rows.filter((r) => r.section === "A")).toHaveLength(20);
+    for (const r of rows) expect(NCERT["10|Maths"], r.label).toContain(r.chapter);
+    const w = chapterWeights(rows);
+    expect([...w.values()].reduce((a, b) => a + b, 0)).toBe(80);
+  });
+});

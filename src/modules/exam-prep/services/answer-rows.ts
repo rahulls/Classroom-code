@@ -1,8 +1,9 @@
 import "server-only";
 import { audit } from "../audit";
 import { epdb } from "../db";
-import { checkRowMarks, parseAnswerRows, rowsTotal, sheetScore, type AnswerRow } from "../domain/answer-rows";
+import { chapterBreakdown, chapterWeights, checkRowMarks, parseAnswerRows, rowsTotal, sheetScore, type AnswerRow } from "../domain/answer-rows";
 import { EpError } from "../errors";
+import { getSettings } from "../settings";
 
 // Marking formats (one fixed list of answer rows per class/board/subject) and row-wise marking of
 // uploaded papers. An uploaded paper takes a copy of its format when it is created, so later changes
@@ -118,4 +119,29 @@ export async function rowScores(paperId: string) {
   const rows = paperRows(p);
   const subs = await epdb.submission.findMany({ where: { paperId, isCurrent: true }, include: { rowMarks: true } });
   return new Map(subs.map((s) => [s.id, sheetScore(rows, s.rowMarks)]));
+}
+
+/**
+ * Class chapter view of an uploaded paper: per chapter, the class's marks out of the marks attempted and
+ * where marks were lost. Group figures are hidden below the minimum cohort (same rule as built papers).
+ */
+export async function rowChapterView(paperId: string) {
+
+  const s = await getSettings();
+  const p = await epdb.paper.findUniqueOrThrow({ where: { id: paperId } });
+  const rows = paperRows(p);
+  const subs = await epdb.submission.findMany({ where: { paperId, isCurrent: true }, include: { rowMarks: true } });
+  const sheets = subs.filter((x) => x.rowMarks.length).map((x) => chapterBreakdown(rows, x.rowMarks));
+  const weights = chapterWeights(rows);
+  const agg = new Map<string, { chapter: string; weight: number; got: number; max: number; lostBy: Record<string, number> }>();
+  for (const [ch, w] of weights) agg.set(ch, { chapter: ch, weight: w, got: 0, max: 0, lostBy: {} });
+  for (const lines of sheets)
+    for (const l of lines) {
+      const a = agg.get(l.chapter) ?? { chapter: l.chapter, weight: 0, got: 0, max: 0, lostBy: {} };
+      a.got += l.got;
+      a.max += l.max;
+      for (const [k, v] of Object.entries(l.lostBy)) a.lostBy[k] = (a.lostBy[k] ?? 0) + v;
+      agg.set(l.chapter, a);
+    }
+  return { sheets: sheets.length, hidden: sheets.length < s["cohort.minSize"], minSize: s["cohort.minSize"], chapters: [...agg.values()] };
 }

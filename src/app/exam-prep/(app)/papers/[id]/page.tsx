@@ -25,7 +25,7 @@ import { chapterList, paperCheck, paperWithQuestions } from "@/modules/exam-prep
 import { ActionButton, EpForm, Field, Msg, Submit } from "../../../ui";
 import { PaperFiles } from "./paper-files";
 import { AnswerRowsCard } from "./answer-rows";
-import { rowScores } from "@/modules/exam-prep/services/answer-rows";
+import { rowChapterView, rowScores } from "@/modules/exam-prep/services/answer-rows";
 
 export const metadata = { title: "Paper" };
 
@@ -46,6 +46,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
   const up = p.uploadOnly;
   const submitted = track.filter((t) => t.submission);
   const scores = up && !draft ? await rowScores(p.id) : null;
+  const rowView = up && !draft ? await rowChapterView(p.id) : null;
   return (
     <div className="space-y-5">
       <div>
@@ -402,10 +403,44 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
             </section>
             {up ? (
               <section className="card space-y-2 text-sm">
-                <h2 className="font-semibold text-[#0f3460]">Marking and reports</h2>
-                <p className="text-muted">
-                  Mark each sheet answer by answer on the <Link href={`/exam-prep/papers/${encodeURIComponent(p.id)}/marking`} className="text-accent hover:underline">Marking</Link> page (answer sheet on the left, your answer rows on the right). Scores show in the tracker. AI marking and the automatic chapter reports need a paper built question by question.
+                <h2 className="font-semibold text-[#0f3460]">Chapter analysis</h2>
+                <p className="text-xs text-muted">
+                  From the marks saved on the <Link href={`/exam-prep/papers/${encodeURIComponent(p.id)}/marking`} className="text-accent hover:underline">Marking</Link> board and the chapters in the paper details. % is of the marks of answers marked so far.
                 </p>
+                {rowView && rowView.chapters.length > 0 && (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-muted">
+                        <th className="py-1">Chapter</th>
+                        <th className="text-right">In paper</th>
+                        <th className="text-right">Class</th>
+                        <th>Marks lost on</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rowView.chapters.map((c) => (
+                        <tr key={c.chapter} className="border-t border-line">
+                          <td className="py-1">{c.chapter}</td>
+                          <td className="text-right">{c.weight}</td>
+                          <td className="text-right font-semibold">{rowView.hidden ? "-" : c.max ? `${Math.round((100 * c.got) / c.max)}%` : "-"}</td>
+                          <td className="text-muted">
+                            {rowView.hidden
+                              ? ""
+                              : Object.entries(c.lostBy)
+                                  .sort((a, b) => b[1] - a[1])
+                                  .map(([k, v]) => `${k.replace("_", " ")} ${v}`)
+                                  .join(", ")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {rowView?.hidden && (
+                  <p className="text-xs text-muted">
+                    {rowView.sheets} marked sheet{rowView.sheets === 1 ? "" : "s"}: class figures show from {rowView.minSize} sheets (Settings → minimum cohort). Each sheet&apos;s own chapter breakdown is on the Marking board.
+                  </p>
+                )}
               </section>
             ) : (
             <section className="card space-y-2 text-sm">

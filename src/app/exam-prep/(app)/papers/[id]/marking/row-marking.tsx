@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { signedLink } from "@/modules/exam-prep/adapters/storage";
 import { epdb } from "@/modules/exam-prep/db";
-import { sheetScore } from "@/modules/exam-prep/domain/answer-rows";
+import { chapterBreakdown, sheetScore } from "@/modules/exam-prep/domain/answer-rows";
 import { paperRows } from "@/modules/exam-prep/services/answer-rows";
 import { RowGrid } from "./row-grid";
 
@@ -56,12 +56,54 @@ export async function RowMarking({ paper, sheet }: { paper: { id: string; title:
                 ) : (
                   <p className="card text-sm text-warn">This sheet has no file.</p>
                 )}
-                <RowGrid key={current.s.id} submissionId={current.s.id} rows={rows} saved={Object.fromEntries(current.s.rowMarks.map((m) => [m.label, { marks: m.marks, errorTag: m.errorTag }]))} />
+                <div className="space-y-3">
+                  <RowGrid key={current.s.id} submissionId={current.s.id} rows={rows} saved={Object.fromEntries(current.s.rowMarks.map((m) => [m.label, { marks: m.marks, errorTag: m.errorTag }]))} />
+                  <SheetChapters lines={chapterBreakdown(rows, current.s.rowMarks)} />
+                </div>
               </div>
             </>
           )}
         </>
       )}
     </div>
+  );
+}
+
+const LOST_NAMES: Record<string, string> = { concept: "concept", calculation: "calculation", missing_steps: "missing steps", misread: "misread", "not tagged": "not tagged" };
+
+/** This sheet, chapter by chapter (saved marks only), weakest first. */
+function SheetChapters({ lines }: { lines: ReturnType<typeof chapterBreakdown> }) {
+  if (!lines.length) return null;
+  const lost: Record<string, number> = {};
+  for (const l of lines) for (const [k, v] of Object.entries(l.lostBy)) lost[k] = (lost[k] ?? 0) + v;
+  return (
+    <section className="card space-y-2 text-xs">
+      <b className="text-sm">Chapter-wise (saved marks)</b>
+      <table className="w-full">
+        <tbody>
+          {lines.map((l) => {
+            const pct = Math.round((100 * l.got) / l.max);
+            return (
+              <tr key={l.chapter} className="border-t border-line">
+                <td className="py-1">{l.chapter}</td>
+                <td className="text-right font-semibold">
+                  {l.got} / {l.max}
+                </td>
+                <td className={`w-12 text-right ${pct === 100 ? "text-ok" : pct < 60 ? "text-bad" : "text-warn"}`}>{pct}%</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {Object.keys(lost).length > 0 && (
+        <p className="text-muted">
+          Marks lost:{" "}
+          {Object.entries(lost)
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => `${v} ${LOST_NAMES[k] ?? k}`)
+            .join(" · ")}
+        </p>
+      )}
+    </section>
   );
 }

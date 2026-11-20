@@ -31,7 +31,9 @@ function splitCsvLine(line: string): string[] {
 
 /** Parses the rows CSV. Returns every problem found (with its line number); rows only when there are none. */
 export function parseAnswerRows(text: string): { rows: AnswerRow[]; errors: string[] } {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/);
+  const firstLine = text.replace(/^﻿/, "").split(/\r?\n/, 1)[0] ?? "";
+  if (/(^|,)\s*text\s*(,|$)/i.test(firstLine) && /(^|,)\s*marks\s*(,|$)/i.test(firstLine)) return rowsFromQuestionsCsv(text);
+  const lines =text.replace(/^﻿/, "").split(/\r?\n/);
   const errors: string[] = [];
   const rows: AnswerRow[] = [];
   let cols = ["answer", "max", "section", "chapter", "choice"];
@@ -120,4 +122,139 @@ export function sheetScore(rows: AnswerRow[], marks: { label: string; marks: num
     } else if (!by.has(r.label)) open++;
   }
   return { got, max: rowsTotal(rows), open };
+}
+
+export const NO_CHAPTER = "No chapter given";
+
+export type ChapterLine = { chapter: string; got: number; max: number; marked: number; lostBy: Record<string, number> };
+
+/**
+ * Chapter-wise result of one sheet, from the rows' chapters. Only marked answers count, so a half-marked
+ * sheet shows what is known so far. For an OR choice the attempted alternative's chapter is used.
+ */
+export function chapterBreakdown(rows: AnswerRow[], marks: { label: string; marks: number; errorTag?: string }[]): ChapterLine[] {
+  const by = new Map(marks.map((m) => [m.label, m]));
+  const out = new Map<string, ChapterLine>();
+  for (const r of rows) {
+    const m = by.get(r.label);
+    if (!m) continue;
+    const ch = r.chapter || NO_CHAPTER;
+    const line = out.get(ch) ?? { chapter: ch, got: 0, max: 0, marked: 0, lostBy: {} };
+    line.got += m.marks;
+    line.max += r.max;
+    line.marked++;
+    const lost = r.max - m.marks;
+    if (lost > 0) {
+      const tag = m.errorTag && m.errorTag !== "none" ? m.errorTag : "not tagged";
+      line.lostBy[tag] = (line.lostBy[tag] ?? 0) + lost;
+    }
+    out.set(ch, line);
+  }
+  return [...out.values()].sort((a, b) => a.got / a.max - b.got / b.max);
+}
+
+/** Chapter max marks of the paper itself (an OR group counts once, under its first alternative's chapter). */
+export function chapterWeights(rows: AnswerRow[]) {
+  const seen = new Set<string>();
+  const out = new Map<string, number>();
+  for (const r of rows) {
+    if (r.choice) {
+      if (seen.has(r.choice)) continue;
+      seen.add(r.choice);
+    }
+    const ch = r.chapter || NO_CHAPTER;
+    out.set(ch, (out.get(ch) ?? 0) + r.max);
+  }
+  return out;
+}
+
+// ------------------------------ answer rows from a questions CSV ------------------------------
+
+/** Full CSV parse (quoted cells may hold commas and line breaks). */
+function parseCsvFull(text: string): string[][] {
+  const s = text.replace(/^\uFEFF/, "");
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let f = "";
+  let q = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (q) {
+      if (c === '"' && s[i + 1] === '"') (f += '"'), i++;
+      else if (c === '"') q = false;
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") row.push(f), (f = "");
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && s[i + 1] === "\n") i++;
+      row.push(f), rows.push(row), (row = []), (f = "");
+    } else f += c;
+  }
+  if (f || row.length) row.push(f), rows.push(row);
+  return rows.filter((r) => r.some((x) => x.trim()));
+}
+
+type Step = { step: string; marks: number };
+const steps = (t: string): Step[] =>
+  t
+    .split("|")
+    .filter((x) => x.trim())
+    .map((x) => {
+      const i = x.lastIndexOf(":");
+      return { step: x.slice(0, i).trim(), marks: Number(x.slice(i + 1)) };
+    });
+
+const PART = /^\(\s*(i{1,3}|iv|v|vi{0,3})\s*\)/i;
+/** Case-study parts from scheme steps labelled (i), (ii), (iii)…: part → marks and the steps' text. Null if not every step is labelled. */
+function parts(sch: Step[]) {
+  if (sch.length < 2 || !sch.every((s) => PART.test(s.step))) return null;
+  const out = new Map<string, { marks: number; text: string[] }>();
+  for (const s of sch) {
+    const k = PART.exec(s.step)![1]!.toLowerCase();
+    const p = out.get(k) ?? { marks: 0, text: [] };
+    p.marks += s.marks;
+    p.text.push(s.step);
+    out.set(k, p);
+  }
+  return out.size >= 2 ? out : null;
+}
+
+/**
+ * The marking board from a question-by-question CSV (number, section, chapter, marks, scheme,
+ * or_text, or_scheme, …): one row per question; an OR question gives .A and .B (choice = number); a
+ * case study whose scheme steps are labelled (i), (ii), (iii) gives one row per part, and the parts
+ * whose OR scheme differs become .A/.B choices (e.g. 36.iii.A / 36.iii.B).
+ */
+export function rowsFromQuestionsCsv(text: string): { rows: AnswerRow[]; errors: string[] } {
+  const csv = parseCsvFull(text);
+  const h = (csv[0] ?? []).map((x) => x.trim().toLowerCase().replace(/\s+/g, "_"));
+  const g = (r: string[], k: string) => (h.indexOf(k) >= 0 ? (r[h.indexOf(k)] ?? "").trim() : "");
+  const errors: string[] = [];
+  const out: AnswerRow[] = [];
+  csv.slice(1).forEach((r, i) => {
+    const n = g(r, "number") || String(i + 1);
+    const marks = Number(g(r, "marks"));
+    const base = { section: g(r, "section") || undefined, chapter: g(r, "chapter") || undefined };
+    const clean = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== "")) as T;
+    if (!(marks > 0)) return void errors.push(`Question ${n}: marks missing`);
+    const main = parts(steps(g(r, "scheme")));
+    const hasOr = !!g(r, "or_text");
+    if (main && [...main.values()].reduce((a, p) => a + p.marks, 0) === marks) {
+      const alt = hasOr ? parts(steps(g(r, "or_scheme"))) : null;
+      for (const [k, p] of main) {
+        const q = alt?.get(k);
+        if (alt && q && q.text.join("|") !== p.text.join("|")) {
+          out.push(clean({ label: `${n}.${k}.A`, max: p.marks, ...base, choice: `${n}.${k}` }));
+          out.push(clean({ label: `${n}.${k}.B`, max: q.marks, ...base, choice: `${n}.${k}` }));
+        } else out.push(clean({ label: `${n}.${k}`, max: p.marks, ...base }));
+      }
+    } else if (hasOr) {
+      out.push(clean({ label: `${n}.A`, max: marks, ...base, choice: n }));
+      out.push(clean({ label: `${n}.B`, max: marks, ...base, choice: n }));
+    } else out.push(clean({ label: n, max: marks, ...base }));
+  });
+  if (errors.length) return { rows: [], errors };
+  // Same checks as a typed details list
+  const check = parseAnswerRows(rowsToCsv(out));
+  return check.errors.length ? { rows: [], errors: check.errors } : { rows: out, errors: [] };
 }

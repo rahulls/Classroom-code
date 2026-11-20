@@ -589,3 +589,28 @@ describe("uploaded papers marked row by row; questions from CSV", () => {
     expect(rd.errors[0]).toMatch(/Question 1/);
   });
 });
+
+describe("uploaded paper with paper details: chapter view", () => {
+  it("class chapter figures follow the details and hide below the minimum cohort", async () => {
+    const { setPaperRows, setRowMarks, rowChapterView } = await import("../services/answer-rows");
+    const p = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 41, uploadOnly: true, totalMarks: 4 });
+    await setPaperRows(p.id, "answer,max,section,chapter\n1,1,A,Real Numbers\n2,3,B,Polynomials\n");
+    const { addPaperFile } = await import("../services/papers");
+    await addPaperFile(p.id, "paper", { name: "paper.pdf", bytes: await fakeSheet(1) });
+    await publishPaper(p.id);
+    await setSettings({ "cohort.minSize": 2 });
+    const a = await student();
+    const b = await student();
+    const sa = await addSubmission({ studentId: a.id, paperId: p.id, files: [{ name: "a.pdf", bytes: await fakeSheet() }], source: "form" });
+    await setRowMarks(sa.id, { "1": 1, "2": 1 }, { "2": "concept" });
+    let v = await rowChapterView(p.id);
+    expect(v.hidden).toBe(true);
+    const sb = await addSubmission({ studentId: b.id, paperId: p.id, files: [{ name: "b.pdf", bytes: await fakeSheet() }], source: "form" });
+    await setRowMarks(sb.id, { "1": 0, "2": 3 }, { "1": "misread" });
+    v = await rowChapterView(p.id);
+    expect(v.hidden).toBe(false);
+    const by = Object.fromEntries(v.chapters.map((c) => [c.chapter, c]));
+    expect(by["Polynomials"]).toMatchObject({ weight: 3, got: 4, max: 6, lostBy: { concept: 2 } });
+    expect(by["Real Numbers"]).toMatchObject({ weight: 1, got: 1, max: 2, lostBy: { misread: 1 } });
+  });
+});

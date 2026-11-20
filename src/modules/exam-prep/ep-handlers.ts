@@ -14,6 +14,7 @@ import { logHours, recordFeedback } from "./services/metrics";
 import { addPendingStudent, addStudent, importIntakeCsv, markVerified, optOut, recordConsent, updateStudent, welcomeFor } from "./services/people";
 import { addPaperFile, addQuestion, clonePaperToBoard, createPaper, importQuestions, makeChapterQuiz, newVersion, PAPER_FILE_KINDS, paperPdfs, publishPaper, removePaperFile, removeQuestion, reuseQuestion, setChapterList, type PaperFileKind } from "./services/papers";
 import { deleteFormat, loadFormatIntoPaper, saveFormat, setPaperRows, setRowMarks } from "./services/answer-rows";
+import { parseAnswerRows, rowsTotal } from "./domain/answer-rows";
 import { applyRetention, deleteStudentData } from "./services/privacy";
 import { computeRanks, markTold } from "./services/ranking";
 import { approveReports, classNote, deliverReports, forceResend, generateReports, markReportSent, regenerateReport } from "./services/reports";
@@ -168,9 +169,21 @@ export const createPaperAction = epAction(
     mode: z.enum(["upload", "questions"]).default("upload"),
     totalMarks: z.coerce.number().optional(),
     file: file.optional(),
+    details: file.optional(),
   }),
   async (v) => {
-    const p = await createPaper({ ...v, title: v.title || undefined, mockMinutes: v.mockMinutes || undefined, uploadOnly: v.mode === "upload", totalMarks: v.totalMarks || undefined });
+    // Paper details CSV (answer, max, section, chapter, choice): checked before the paper is created
+    let detailsText: string | null = null;
+    let detailsTotal: number | undefined;
+    if (v.mode === "upload" && v.details && v.details.size) {
+      detailsText = await v.details.text();
+      const parsed = parseAnswerRows(detailsText);
+      if (parsed.errors.length) throw new EpError(`Paper details CSV: ${parsed.errors.slice(0, 5).join(" · ")}`);
+      detailsTotal = rowsTotal(parsed.rows);
+      if (v.totalMarks && v.totalMarks !== detailsTotal) throw new EpError(`The paper details add up to ${detailsTotal} marks but Total marks says ${v.totalMarks}. Fix one of them (OR alternatives count once).`);
+    }
+    const p = await createPaper({ ...v, title: v.title || undefined, mockMinutes: v.mockMinutes || undefined, uploadOnly: v.mode === "upload", totalMarks: v.totalMarks || detailsTotal || undefined });
+    if (detailsText) await setPaperRows(p.id, detailsText);
     if (v.mode === "upload" && v.file) await addPaperFile(p.id, "paper", await bytes(v.file));
     redirect(`/exam-prep/papers/${p.id}`);
   },
