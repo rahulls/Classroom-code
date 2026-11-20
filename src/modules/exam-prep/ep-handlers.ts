@@ -13,6 +13,7 @@ import { markMessageSent, validateTemplate } from "./services/messaging";
 import { logHours, recordFeedback } from "./services/metrics";
 import { addPendingStudent, addStudent, importIntakeCsv, markVerified, optOut, recordConsent, updateStudent, welcomeFor } from "./services/people";
 import { addPaperFile, addQuestion, clonePaperToBoard, createPaper, importQuestions, makeChapterQuiz, newVersion, PAPER_FILE_KINDS, paperPdfs, publishPaper, removePaperFile, removeQuestion, reuseQuestion, setChapterList, type PaperFileKind } from "./services/papers";
+import { deleteFormat, loadFormatIntoPaper, saveFormat, setPaperRows, setRowMarks } from "./services/answer-rows";
 import { applyRetention, deleteStudentData } from "./services/privacy";
 import { computeRanks, markTold } from "./services/ranking";
 import { approveReports, classNote, deliverReports, forceResend, generateReports, markReportSent, regenerateReport } from "./services/reports";
@@ -558,4 +559,53 @@ export const settingAction = epAction(z.object({ key: z.string(), value: z.strin
 export const retentionAction = epAction(z.object({ mode: z.enum(["archive", "delete"]), confirm: z.literal("APPROVE", { message: "Type APPROVE to confirm" }) }), async (v) => {
   const n = await applyRetention(v.mode);
   return done(`Retention applied to ${n} students (${v.mode}).`, "/exam-prep/privacy");
+});
+
+// ------------------------------ marking formats and row-wise marking (uploaded papers) ------------------------------
+
+/** Rows from the textarea, or from an uploaded CSV file (the file wins when both are given). */
+async function rowsText(v: { rows?: string; csv?: File }) {
+  const t = v.csv && v.csv.size ? await v.csv.text() : (v.rows ?? "");
+  if (!t.trim()) throw new EpError("Type the answer rows or choose a CSV file.");
+  if (t.length > 200_000) throw new EpError("That file is too large for a marking format.");
+  return t;
+}
+
+export const saveFormatAction = epAction(
+  z.object({ klass: z.coerce.number().int().min(1).max(12), board: z.string().min(1).max(30), subject: z.string().min(1).max(40), rows: z.string().max(200_000).optional(), csv: file.optional() }),
+  async (v) => {
+    const rows = await saveFormat(v.klass, v.board, v.subject, await rowsText(v));
+    return done(`Saved: ${rows.length} answer rows for Class ${v.klass} ${v.board} ${v.subject}. New uploaded papers for it will use these rows.`, "/exam-prep/papers");
+  },
+);
+
+export const deleteFormatAction = epAction(z.object({ formatId: id }), async (v) => {
+  await deleteFormat(v.formatId);
+  return done("Format deleted. Papers that already use it keep their rows.", "/exam-prep/papers");
+});
+
+export const paperRowsAction = epAction(z.object({ paperId: id, rows: z.string().max(200_000).optional(), csv: file.optional() }), async (v) => {
+  const rows = await setPaperRows(v.paperId, await rowsText(v));
+  return done(`Saved ${rows.length} answer rows.`, `/exam-prep/papers/${v.paperId}`);
+});
+
+export const loadFormatAction = epAction(z.object({ paperId: id }), async (v) => {
+  const rows = await loadFormatIntoPaper(v.paperId);
+  return done(`Loaded ${rows.length} answer rows from the format.`, `/exam-prep/papers/${v.paperId}`);
+});
+
+const TAGS_OK = ["none", "concept", "calculation", "missing_steps", "misread"];
+/** Row marking grid: fields m:<label> (marks; blank = not marked) and t:<label> (where lost). */
+export const rowMarksAction = epAction(z.object({ submissionId: id }).catchall(z.string()), async (v) => {
+  const marks: Record<string, number | null> = {};
+  const tags: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v)) {
+    if (k.startsWith("m:")) {
+      const t = String(val).trim();
+      if (t !== "" && !Number.isFinite(Number(t))) throw new EpError(`${k.slice(2)}: "${t}" is not a number.`);
+      marks[k.slice(2)] = t === "" ? null : Number(t);
+    } else if (k.startsWith("t:") && TAGS_OK.includes(String(val))) tags[k.slice(2)] = String(val);
+  }
+  const r = await setRowMarks(v.submissionId, marks, tags);
+  return done(`Saved. ${r.got} / ${r.max}${r.open ? ` · ${r.open} answer${r.open === 1 ? "" : "s"} not marked yet` : " · fully marked"}.`);
 });

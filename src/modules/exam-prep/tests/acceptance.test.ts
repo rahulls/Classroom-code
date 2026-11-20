@@ -524,3 +524,68 @@ describe("CBSE board paper with internal choices (OR)", () => {
     await expect(addQuestion(p2.id, sec.id, { chapter: "Real Numbers", topic: "t", marks: 2, type: "short", difficulty: "easy", text: "Question one?", options: [], markingScheme: [{ step: "a", marks: 2 }], or: { text: "Question two?", markingScheme: [{ step: "b", marks: 1 }] } } as never)).rejects.toThrow(/OR question's marking scheme/);
   });
 });
+
+describe("uploaded papers marked row by row; questions from CSV", () => {
+  it("a new uploaded paper copies its class format; row marks are all-or-nothing and audited", async () => {
+    const { saveFormat, setRowMarks, setPaperRows, rowScores } = await import("../services/answer-rows");
+    const fmt = fs.readFileSync(path.resolve(__dirname, "../../../../design/marking-formats/cbse-class10-maths-standard-041.csv"), "utf8");
+    const rows = await saveFormat(10, "CBSE", "Maths", fmt);
+    expect(rows).toHaveLength(53);
+    const p = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 21, uploadOnly: true });
+    expect(p.totalMarks).toBe(80);
+    expect((p.answerRows as unknown[]).length).toBe(53);
+    const { addPaperFile } = await import("../services/papers");
+    await addPaperFile(p.id, "paper", { name: "paper.pdf", bytes: await fakeSheet(1) });
+    await publishPaper(p.id);
+    const st = await student();
+    const sub = await addSubmission({ studentId: st.id, paperId: p.id, files: [{ name: "s.pdf", bytes: await fakeSheet() }], source: "form" });
+    // One bad value (and an OR clash) saves nothing
+    await expect(setRowMarks(sub.id, { "1": 1, "21.A": 2, "21.B": 1 })).rejects.toThrow(/alternatives/);
+    await expect(setRowMarks(sub.id, { "1": 1, "26": 4 })).rejects.toThrow(/between 0 and 3/);
+    expect(await epdb.rowMark.count()).toBe(0);
+    const r = await setRowMarks(sub.id, { "1": 1, "2": 0, "21.B": 1.5, "36.i": 1, "36.iii.A": 2 }, { "2": "concept", "21.B": "calculation" });
+    expect(r).toMatchObject({ got: 5.5, max: 80 });
+    expect((await epdb.rowMark.findFirstOrThrow({ where: { label: "2" } })).errorTag).toBe("concept");
+    // Blank removes a mark; full marks clear the error type
+    await setRowMarks(sub.id, { "2": null, "21.B": 2 }, { "21.B": "calculation" });
+    expect(await epdb.rowMark.findFirst({ where: { label: "2" } })).toBeNull();
+    expect((await epdb.rowMark.findFirstOrThrow({ where: { label: "21.B" } })).errorTag).toBe("none");
+    expect((await rowScores(p.id)).get(sub.id)).toMatchObject({ got: 6, max: 80 });
+    expect(await epdb.auditLog.count({ where: { entity: "RowMark" } })).toBeGreaterThanOrEqual(6);
+    // Rows are locked once marks exist
+    await expect(setPaperRows(p.id, "1,1")).rejects.toThrow(/already marked/);
+    // Marking every row marks the sheet
+    const all: Record<string, number> = {};
+    for (const row of rows) if (!row.choice || row.label.endsWith(".A")) all[row.label] = row.max;
+    const done = await setRowMarks(sub.id, { ...all, "21.B": null });
+    expect(done).toMatchObject({ got: 80, open: 0 });
+    expect((await epdb.submission.findUniqueOrThrow({ where: { id: sub.id } })).status).toBe("marked");
+  });
+
+  it("the CSV version of the practice paper imports exactly like the JSON; the template CSV imports", async () => {
+    const { importQuestions, paperWithQuestions, QUESTIONS_CSV_TEMPLATE } = await import("../services/papers");
+    const { NCERT } = await import("../seed/chapters");
+    await setChapterList(10, "Maths", "CBSE", NCERT["10|Maths"]!);
+    const dir = path.resolve(__dirname, "../../../../design/sample-papers");
+    const a = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 31 });
+    const b = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 32 });
+    expect((await importQuestions(a.id, fs.readFileSync(path.join(dir, "cbse-class10-maths-practice-1.json"), "utf8"))).errors).toEqual([]);
+    const rb = await importQuestions(b.id, fs.readFileSync(path.join(dir, "cbse-class10-maths-practice-1.csv"), "utf8"));
+    expect(rb.errors).toEqual([]);
+    expect(rb.imported).toBe(38);
+    const shape = async (id: string) =>
+      (await paperWithQuestions(id))!.items.map((i) => [i.number, i.section.name, i.question.chapter, i.question.marks, i.question.type, i.question.text, i.question.correctOption, JSON.stringify(i.question.markingScheme), i.question.orText ?? null, JSON.stringify(i.question.orMarkingScheme ?? null)]);
+    expect(await shape(b.id)).toEqual(await shape(a.id));
+    const c = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 33 });
+    const rc = await importQuestions(c.id, QUESTIONS_CSV_TEMPLATE);
+    expect(rc.errors).toEqual([]);
+    expect(rc.imported).toBe(4);
+    expect((await paperWithQuestions(c.id))!.items.filter((i) => i.question.orText).map((i) => i.number)).toEqual([3, 4]);
+    // A CSV with a bad row imports nothing and names the row
+    const bad = QUESTIONS_CSV_TEMPLATE.replace("1,A,Real Numbers,HCF and LCM,1,", "1,A,Real Numbers,HCF and LCM,0,");
+    const d = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 34 });
+    const rd = await importQuestions(d.id, bad);
+    expect(rd.imported).toBe(0);
+    expect(rd.errors[0]).toMatch(/Question 1/);
+  });
+});

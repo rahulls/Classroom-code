@@ -126,7 +126,7 @@ export function zip(entries: { name: string; data: Buffer }[]) {
 export async function exportStudent(studentId: string) {
   const st = await epdb.student.findUniqueOrThrow({
     where: { id: studentId },
-    include: { parents: true, submissions: { include: { marks: true, mcq: true } }, reports: true, feedback: true, plans: true, payments: true, offers: true, doubts: true, attendances: true },
+    include: { parents: true, submissions: { include: { marks: true, mcq: true, rowMarks: true } }, reports: true, feedback: true, plans: true, payments: true, offers: true, doubts: true, attendances: true },
   });
   const { reports, submissions, ...rest } = st;
   const entries: { name: string; data: Buffer }[] = [

@@ -7,6 +7,7 @@ import { audit } from "../audit";
 import { epdb } from "../db";
 import { checkPaper, paperId as makePaperId, SUBJECT_CODE } from "../domain/programme";
 import { getSettings } from "../settings";
+import { rowsTotal, type AnswerRow } from "../domain/answer-rows";
 import { esc, pageHtml } from "./html";
 import { parseCsv } from "./people";
 
@@ -61,7 +62,11 @@ export async function createPaper(p: { klass: number; subject: string; board: st
   const s = await getSettings();
   const id = makePaperId(p);
   if (await epdb.paper.findUnique({ where: { id } })) throw new EpError(`Paper ${id} already exists.`);
-  if (p.uploadOnly && !(p.totalMarks && p.totalMarks > 0)) throw new EpError("Give the paper's total marks.");
+  // An uploaded paper takes a copy of its class/board/subject marking format (answer rows), if there is one
+  const fmt = p.uploadOnly ? await epdb.markingFormat.findUnique({ where: { klass_board_subject: { klass: p.klass, board: p.board, subject: p.subject } } }) : null;
+  const fmtRows = (fmt?.rows as AnswerRow[] | undefined) ?? null;
+  const totalMarks = p.totalMarks || (fmtRows ? rowsTotal(fmtRows) : undefined);
+  if (p.uploadOnly && !(totalMarks && totalMarks > 0)) throw new EpError("Give the paper's total marks (or add a marking format for this class, board and subject).");
   const pattern = s["papers.patterns"][p.board] ?? s["papers.patterns"].CBSE ?? [];
   const paper = await epdb.paper.create({
     data: {
@@ -79,7 +84,8 @@ export async function createPaper(p: { klass: number; subject: string; board: st
       opensAt: p.opensAt,
       dueAt: p.dueAt,
       uploadOnly: !!p.uploadOnly,
-      totalMarks: p.uploadOnly ? p.totalMarks : null,
+      totalMarks: p.uploadOnly ? totalMarks : null,
+      ...(fmtRows ? { answerRows: fmtRows } : {}),
       sections: { create: (p.kind === "quiz" ? [{ name: "A", type: "mcq" as const }] : pattern).map((sec, i) => ({ name: sec.name, type: sec.type, order: i })) },
     },
   });
@@ -230,6 +236,9 @@ export async function newVersion(id: string) {
         graceHours: p.graceHours,
         isDiagnostic: p.isDiagnostic,
         isCurrent: true,
+        uploadOnly: p.uploadOnly,
+        totalMarks: p.totalMarks,
+        ...(p.answerRows ? { answerRows: p.answerRows as AnswerRow[] } : {}),
       },
     });
     const map = new Map<string, string>();
@@ -309,20 +318,39 @@ export async function exportQuestions(paperId: string) {
  * marks, type, difficulty, text, option_a..d, correct_option, scheme as "step:marks|step:marks", solution).
  * All or nothing.
  */
+/** The question-import CSV: one row per question, in paper order. Cells with commas or line breaks go in quotes. */
+export const QUESTIONS_CSV_TEMPLATE = [
+  "number,section,chapter,topic,marks,type,difficulty,text,option_a,option_b,option_c,option_d,correct_option,scheme,solution,or_text,or_scheme,or_solution",
+  '1,A,Real Numbers,HCF and LCM,1,mcq,easy,"The HCF of 12 and 18 is",2,3,6,36,C,,,,,',
+  '2,A,Polynomials,Zeroes,1,mcq,medium,"Assertion (A): ...\nReason (R): ...",Both (A) and (R) are true and (R) is the correct explanation of (A).,Both (A) and (R) are true but (R) is not the correct explanation of (A).,(A) is true but (R) is false.,(A) is false but (R) is true.,A,,,,,',
+  '3,B,Real Numbers,Word problems,2,short,medium,"Three ropes are 64 m, 80 m and 96 m long. Find the greatest equal length they can be cut into.",,,,,,HCF = 16 m:1|Number of pieces = 15:1,"64 = 2^6, 80 = 2^4 x 5, 96 = 2^5 x 3",Two runners take 18 and 12 minutes per round. When do they meet again at the start?,LCM = 36 minutes:1|Faster runner completes 3 rounds:1,LCM(18 12) = 36',
+  '4,E,Pair of Linear Equations in Two Variables,Case study,4,case,medium,"(Case text)\n(i) ... [1]\n(ii) ... [1]\n(iii) (A) ... [2]",,,,,,(i) step:1|(ii) step:1|(iii)(A) step:1|(iii)(A) answer:1,,"(Case text)\n(i) ... [1]\n(ii) ... [1]\n(iii) (B) ... [2]",(i) step:1|(ii) step:1|(iii)(B) step:1|(iii)(B) answer:1,',
+].join("\n") + "\n";
+
 export async function importQuestions(paperId: string, text: string) {
   const p = await paperWithQuestions(paperId);
   if (!p) throw new EpError("Paper not found.");
   assertDraft(p);
   let rows: (QuestionIn & { section?: string })[] = [];
-  const trimmed = text.trim();
+  const trimmed = text.replace(/^﻿/, "").trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     const j = JSON.parse(trimmed) as { questions?: unknown[] } | unknown[];
     rows = (Array.isArray(j) ? j : (j.questions ?? [])) as typeof rows;
   } else {
-    const csv = parseCsv(trimmed);
-    const h = csv[0]!.map((x) => x.trim().toLowerCase());
+    const csv = parseCsv(trimmed).filter((r) => r.some((c) => c.trim()));
+    const h = csv[0]!.map((x) => x.trim().toLowerCase().replace(/\s+/g, "_"));
+    if (!h.includes("text") || !h.includes("marks")) return { imported: 0, errors: ["The CSV needs a header row with at least: section, chapter, topic, marks, type, difficulty, text. Download the template."] };
     const g = (r: string[], k: string) => (h.indexOf(k) >= 0 ? (r[h.indexOf(k)] ?? "").trim() : "");
-    rows = csv.slice(1).map((r) => ({
+    const scheme = (t: string) =>
+      t
+        .split("|")
+        .filter((x) => x.trim())
+        .map((x) => {
+          const i = x.lastIndexOf(":");
+          return { step: x.slice(0, i).trim(), marks: Number(x.slice(i + 1)) };
+        });
+    const body = h.includes("number") ? [...csv.slice(1)].sort((a, b) => (Number(g(a, "number")) || 0) - (Number(g(b, "number")) || 0)) : csv.slice(1);
+    rows = body.map((r) => ({
       section: g(r, "section"),
       chapter: g(r, "chapter"),
       topic: g(r, "topic"),
@@ -332,14 +360,9 @@ export async function importQuestions(paperId: string, text: string) {
       text: g(r, "text"),
       options: ["option_a", "option_b", "option_c", "option_d"].map((k) => g(r, k)).filter(Boolean),
       correctOption: g(r, "correct_option"),
-      markingScheme: g(r, "scheme")
-        .split("|")
-        .filter(Boolean)
-        .map((s) => {
-          const i = s.lastIndexOf(":");
-          return { step: s.slice(0, i).trim(), marks: Number(s.slice(i + 1)) };
-        }),
+      markingScheme: scheme(g(r, "scheme")),
       solution: g(r, "solution") || undefined,
+      ...(g(r, "or_text") ? { or: { text: g(r, "or_text"), markingScheme: scheme(g(r, "or_scheme")), solution: g(r, "or_solution") || undefined } } : {}),
     }));
   }
   const errors: string[] = [];

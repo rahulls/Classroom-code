@@ -143,6 +143,7 @@ model Paper {
   isCurrent    Boolean   @default(true) // newest version
   uploadOnly   Boolean   @default(false) // the tutor's own file (PDF/CSV): no question-by-question entry
   totalMarks   Float? // for upload-only papers
+  answerRows   Json? // upload-only papers: [{ label, max, section?, chapter?, choice? }] copied from the MarkingFormat
   createdAt    DateTime  @default(now())
   publishedAt  DateTime?
 
@@ -280,6 +281,7 @@ model Submission {
   marks      Mark[]
   selfMarks  SelfMarkEntry[]
   spotChecks SpotCheck[]
+  rowMarks   RowMark[]
 
   @@index([paperId, isCurrent])
   @@index([studentId])
@@ -314,6 +316,32 @@ model Mark {
   updatedAt    DateTime   @updatedAt
 
   @@unique([submissionId, questionId])
+}
+
+/// The fixed answer rows for one class/board/subject (e.g. 1.1 = 1 mark, 21.A / 21.B = 2 marks, a choice).
+model MarkingFormat {
+  id        String   @id @default(cuid())
+  klass     Int
+  board     String
+  subject   String
+  rows      Json // [{ label, max, section?, chapter?, choice? }]
+  updatedAt DateTime @updatedAt
+
+  @@unique([klass, board, subject])
+}
+
+/// A mark for one answer row of an uploaded paper (label from Paper.answerRows).
+model RowMark {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  label        String
+  maxMarks     Float
+  marks        Float
+  errorTag     String     @default("none")
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([submissionId, label])
 }
 
 /// What the AI adapter was sent: kept (without the image) so tests and the teacher can check no personal data left.

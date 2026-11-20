@@ -24,6 +24,8 @@ import { tracker } from "@/modules/exam-prep/services/calendar";
 import { chapterList, paperCheck, paperWithQuestions } from "@/modules/exam-prep/services/papers";
 import { ActionButton, EpForm, Field, Msg, Submit } from "../../../ui";
 import { PaperFiles } from "./paper-files";
+import { AnswerRowsCard } from "./answer-rows";
+import { rowScores } from "@/modules/exam-prep/services/answer-rows";
 
 export const metadata = { title: "Paper" };
 
@@ -43,6 +45,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
   const draft = p.status === "draft";
   const up = p.uploadOnly;
   const submitted = track.filter((t) => t.submission);
+  const scores = up && !draft ? await rowScores(p.id) : null;
   return (
     <div className="space-y-5">
       <div>
@@ -120,7 +123,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
         </a>
           </>
         )}
-        {!draft && !up && (
+        {!draft && (
           <Link href={`/exam-prep/papers/${encodeURIComponent(p.id)}/marking`} className="btn-primary ml-auto px-3 py-1">
             Marking →
           </Link>
@@ -128,6 +131,8 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
       </section>
 
       <PaperFiles paperId={p.id} uploadOnly={up} />
+
+      {up && <AnswerRowsCard paper={p} />}
 
       {!up && (
       <section className="card">
@@ -272,7 +277,13 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
               {!bank.length && <li className="py-2 text-muted">No other questions for this class and subject yet.</li>}
             </ul>
             <h2 className="font-semibold text-[#0f3460]">Import questions</h2>
-            <p className="text-xs text-muted">JSON (as exported) or CSV with columns section, chapter, topic, marks, type, difficulty, text, option_a-d, correct_option, scheme ("step:marks|step:marks"), solution.</p>
+            <p className="text-xs text-muted">
+              JSON (as exported) or CSV, one row per question in paper order: number, section, chapter, topic, marks, type, difficulty, text, option_a-d, correct_option, scheme (&quot;step:marks|step:marks&quot;), solution, and for an OR question or_text, or_scheme, or_solution.{" "}
+              <a href="/exam-prep/templates?kind=questions" className="text-accent hover:underline">
+                Download the CSV template
+              </a>
+              . Nothing is imported if any row has a problem; the message lists them.
+            </p>
             <EpForm action={importQuestionsAction} className="space-y-2">
               <Msg />
               <input type="hidden" name="paperId" value={p.id} />
@@ -309,7 +320,15 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
                         <span className="font-mono text-xs text-muted">{student.code}</span>
                         {!student.parents.some((x) => x.consentAt) && <span className="ml-1 text-xs text-bad">intake pending</span>}
                       </td>
-                      <td>{submission ? `${submission.isLate ? "late · " : ""}${submission.status}` : <span className="text-warn">missing</span>}</td>
+                      <td>
+                        {submission ? `${submission.isLate ? "late · " : ""}${submission.status}` : <span className="text-warn">missing</span>}
+                        {submission && scores?.get(submission.id) && (
+                          <span className="ml-2 font-semibold">
+                            {scores.get(submission.id)!.got} / {scores.get(submission.id)!.max}
+                            {scores.get(submission.id)!.open ? <span className="ml-1 text-xs font-normal text-muted">({scores.get(submission.id)!.open} unmarked)</span> : null}
+                          </span>
+                        )}
+                      </td>
                       <td className="text-xs">{submission?.flags.join(", ")}</td>
                       <td>
                         {submission ? (
@@ -385,7 +404,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
               <section className="card space-y-2 text-sm">
                 <h2 className="font-semibold text-[#0f3460]">Marking and reports</h2>
                 <p className="text-muted">
-                  This paper is your own uploaded file, so the app keeps the tracker and the filed sheets. AI marking, chapter analytics and the automatic reports need a paper built question by question.
+                  Mark each sheet answer by answer on the <Link href={`/exam-prep/papers/${encodeURIComponent(p.id)}/marking`} className="text-accent hover:underline">Marking</Link> page (answer sheet on the left, your answer rows on the right). Scores show in the tracker. AI marking and the automatic chapter reports need a paper built question by question.
                 </p>
               </section>
             ) : (

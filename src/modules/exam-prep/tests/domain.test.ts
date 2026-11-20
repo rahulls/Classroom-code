@@ -247,3 +247,30 @@ describe("commerce and quality", () => {
     expect(new Set(seededPick([1, 2, 3, 4, 5, 6, 7, 8], 5, 42)).size).toBe(5);
   });
 });
+
+describe("answer rows (uploaded papers)", async () => {
+  const { parseAnswerRows, rowsTotal, checkRowMarks, sheetScore, rowsToCsv } = await import("../domain/answer-rows");
+  it("parses labels like 1.1, 4.a, 36.iii.A with an optional header; OR choices count once", () => {
+    const r = parseAnswerRows("answer,max,section,chapter,choice\n1.1,1,A,,\n4.a,2,B,Real Numbers,\n21.A,2,B,,21\n21.B,2,B,,21\n36.iii.A,2,E,,36.iii\n36.iii.B,2,E,,36.iii\n");
+    expect(r.errors).toEqual([]);
+    expect(r.rows.map((x) => x.label)).toEqual(["1.1", "4.a", "21.A", "21.B", "36.iii.A", "36.iii.B"]);
+    expect(r.rows[1]).toEqual({ label: "4.a", max: 2, section: "B", chapter: "Real Numbers" });
+    expect(rowsTotal(r.rows)).toBe(7);
+    expect(parseAnswerRows(rowsToCsv(r.rows)).rows).toEqual(r.rows);
+    expect(parseAnswerRows("1,1\n2,0.5").rows).toHaveLength(2);
+  });
+  it("reports every bad row and saves none", () => {
+    const r = parseAnswerRows("1,1\n1,2\n2,abc\nx y,1\n3.A,2,,,3\n");
+    expect(r.rows).toEqual([]);
+    expect(r.errors.join(" | ")).toMatch(/Line 2: 1 appears twice.*Line 3.*Line 4.*Choice "3" has only one row/);
+    expect(parseAnswerRows("5.A,2,,,5\n5.B,3,,,5").errors[0]).toMatch(/same marks/);
+  });
+  it("checks marks: range, halves, one alternative per choice; score and open count", () => {
+    const { rows } = parseAnswerRows("1,1\n2.a,2\n3.A,3,,,3\n3.B,3,,,3");
+    expect(() => checkRowMarks(rows, { "2.a": 3 })).toThrow(/between 0 and 2/);
+    expect(() => checkRowMarks(rows, { "2.a": 1.25 })).toThrow(/half/);
+    expect(() => checkRowMarks(rows, { "3.A": 2, "3.B": 1 })).toThrow(/alternatives/);
+    expect(() => checkRowMarks(rows, { "9": 1 })).toThrow(/not an answer row/);
+    expect(sheetScore(rows, [{ label: "1", marks: 1 }, { label: "3.B", marks: 2.5 }])).toEqual({ got: 3.5, max: 6, open: 1 });
+  });
+});

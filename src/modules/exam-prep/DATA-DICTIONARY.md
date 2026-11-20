@@ -16,6 +16,8 @@ shown in IST.
 | ChapterList | Syllabus order per class, subject and board | Questions must use these chapter names |
 | Paper | A paper version | id `C10-MAT-P1-CBSE` (`-v2`...); baseId; status draft → published → (closed) → marked → reported; kind paper/mock/quiz; isDiagnostic (Paper 0); published papers never change, only get a new version |
 | PaperFile | The tutor's own files for a paper | kind paper/key/solutions/other; PDF or CSV; isCurrent (re-uploading keeps older versions). A Paper with `uploadOnly` + `totalMarks` is published from its file, without questions |
+| MarkingFormat | Fixed answer rows per class/board/subject | rows JSON [{ label (1, 1.1, 4.a, 36.iii.A), max, section?, chapter?, choice? }]; rows sharing a choice key are OR alternatives, counted once. A new uploaded paper copies it into `Paper.answerRows` |
+| RowMark | A mark for one answer row of an uploaded paper | submissionId + label (unique), maxMarks, marks, errorTag. Audited (rowmark.entered/changed/removed); one bad value in a save changes nothing |
 | Section | Paper sections from the board pattern | name, type (mcq/short/long/case) |
 | Question | Question bank | chapter, topic, marks, type, difficulty, options and correctOption (MCQ), markingScheme `[{step, marks}]` adding up to the marks, solution |
 | PaperQuestion | A question placed on a paper | Lets questions be reused across papers |

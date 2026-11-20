@@ -7,6 +7,7 @@ import { calibration, enteredTotal, spotCheckSummary } from "@/modules/exam-prep
 import { getSettings } from "@/modules/exam-prep/settings";
 import { ActionButton, EpForm, Msg, Submit } from "../../../../ui";
 import { ReviewPanel, type ReviewItem } from "./review-panel";
+import { RowMarking } from "./row-marking";
 
 export const metadata = { title: "Marking" };
 
@@ -16,6 +17,7 @@ export default async function MarkingPage({ params, searchParams }: { params: Pr
   const paperId = decodeURIComponent(id);
   const paper = await epdb.paper.findUnique({ where: { id: paperId }, include: { items: { include: { question: true }, orderBy: { number: "asc" } } } });
   if (!paper) notFound();
+  if (paper.uploadOnly) return <RowMarking paper={paper} sheet={sp.sheet} />;
   const s = await getSettings();
   const subs = await epdb.submission.findMany({ where: { paperId, isCurrent: true }, include: { student: true, marks: true, selfMarks: true }, orderBy: { student: { code: "asc" } } });
   const onlyReview = sp.all !== "1";
@@ -102,8 +104,8 @@ export default async function MarkingPage({ params, searchParams }: { params: Pr
               <input type="hidden" name="submissionId" value={current.id} />
               <div className="max-h-[70vh] overflow-y-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-[var(--card,white)]">
-                    <tr className="text-left text-muted">
+                  <thead>
+                    <tr className="text-left text-muted [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-panel">
                       <th className="py-1">Q</th>
                       <th>Chapter</th>
                       <th className="text-right">Max</th>

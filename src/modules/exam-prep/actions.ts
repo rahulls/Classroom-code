@@ -281,3 +281,23 @@ export async function settingAction(prev: EpResult, fd: FormData): Promise<EpRes
 export async function retentionAction(prev: EpResult, fd: FormData): Promise<EpResult> {
   return h.retentionAction(prev, fd);
 }
+
+export async function saveFormatAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.saveFormatAction(prev, fd);
+}
+
+export async function deleteFormatAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.deleteFormatAction(prev, fd);
+}
+
+export async function paperRowsAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.paperRowsAction(prev, fd);
+}
+
+export async function loadFormatAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.loadFormatAction(prev, fd);
+}
+
+export async function rowMarksAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.rowMarksAction(prev, fd);
+}

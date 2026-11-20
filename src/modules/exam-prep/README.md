@@ -49,7 +49,7 @@ so they never call a real AI service or send mail. They never touch the classroo
 databases: `DATABASE_URL=…/rsc_classroom_test`, `EXAM_PREP_DATABASE_URL=…/rsc_exam_prep_test`,
 `EXAM_PREP_STORAGE=<scratch>`, `EXAM_PREP_AI_ADAPTER=stub`, `EXAM_PREP_EMAIL_ADAPTER=stub`,
 `NEXT_DIST_DIR=.next-test npx next start -p 4313`. Then reset and seed the test database and run
-`node src/modules/exam-prep/tests/e2e/ui-flow.mjs`.
+`node src/modules/exam-prep/tests/e2e/ui-flow.mjs`. On an empty test database, `node src/modules/exam-prep/tests/e2e/rows-flow.mjs` checks uploaded papers marked row by row and the questions CSV import.
 
 Test fixtures (spec section 8):
 - Fixture A: `tests/fixtures/fixture-a.ts` and `tests/domain.test.ts`.
