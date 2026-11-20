@@ -127,7 +127,7 @@ export function reportHtml(d: ReportData, audience: Audience, s: Settings, compa
   const weak = d.weak.join(", ");
   const blocks: string[] = [];
   if (audience === "student") {
-    blocks.push(`<div class="row"><div class="box"><h2>${t.redo}</h2><ol>${d.redo.map((r) => `<li>Q${r.number} · ${esc(r.chapter)} (${r.lost} ${t.marks.toLowerCase()})</li>`).join("")}</ol><p class="muted">Worked solutions: Friday's key post, ${esc(d.paper.id)}.</p></div><div class="box"><h2>${t.next}</h2><ol>${t
+    blocks.push(`<div class="row"><div class="box"><h2>${t.redo}</h2><ol>${d.redo.map((r) => `<li>Q${r.number} · ${esc(r.chapter)} (${r.lost} ${r.lost === 1 && d.lang === "en" ? "mark" : t.marks.toLowerCase()})</li>`).join("")}</ol><p class="muted">Worked solutions: Friday's key post, ${esc(d.paper.id)}.</p></div><div class="box"><h2>${t.next}</h2><ol>${t
       .tasks(d.weak)
       .map((x) => `<li>${esc(x)}</li>`)
       .join("")}</ol></div></div>`);
