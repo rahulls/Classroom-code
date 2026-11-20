@@ -301,3 +301,15 @@ export async function loadFormatAction(prev: EpResult, fd: FormData): Promise<Ep
 export async function rowMarksAction(prev: EpResult, fd: FormData): Promise<EpResult> {
   return h.rowMarksAction(prev, fd);
 }
+
+export async function sheetReportAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.sheetReportAction(prev, fd);
+}
+
+export async function refreshSheetReportAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.refreshSheetReportAction(prev, fd);
+}
+
+export async function approveSheetReportAction(prev: EpResult, fd: FormData): Promise<EpResult> {
+  return h.approveSheetReportAction(prev, fd);
+}

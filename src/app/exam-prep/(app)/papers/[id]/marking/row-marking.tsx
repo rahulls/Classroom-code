@@ -4,6 +4,9 @@ import { epdb } from "@/modules/exam-prep/db";
 import { chapterBreakdown, sheetScore } from "@/modules/exam-prep/domain/answer-rows";
 import { paperRows } from "@/modules/exam-prep/services/answer-rows";
 import { RowGrid } from "./row-grid";
+import { approveSheetReportAction, refreshSheetReportAction, sheetReportAction } from "@/modules/exam-prep/actions";
+import { parentReachable } from "@/modules/exam-prep/services/people";
+import { ActionButton } from "../../../../ui";
 
 /** Marking for an uploaded paper: the answer sheet on the left, the paper's answer rows on the right. */
 export async function RowMarking({ paper, sheet }: { paper: { id: string; title: string; answerRows: unknown; totalMarks: number | null }; sheet?: string }) {
@@ -58,6 +61,7 @@ export async function RowMarking({ paper, sheet }: { paper: { id: string; title:
                 )}
                 <div className="space-y-3">
                   <RowGrid key={current.s.id} submissionId={current.s.id} rows={rows} saved={Object.fromEntries(current.s.rowMarks.map((m) => [m.label, { marks: m.marks, errorTag: m.errorTag }]))} />
+                  <SheetReport submissionId={current.s.id} studentId={current.s.studentId} paperId={paper.id} open={current.score.open} />
                   <SheetChapters lines={chapterBreakdown(rows, current.s.rowMarks)} />
                 </div>
               </div>
@@ -102,6 +106,68 @@ function SheetChapters({ lines }: { lines: ReturnType<typeof chapterBreakdown> }
             .sort((a, b) => b[1] - a[1])
             .map(([k, v]) => `${v} ${LOST_NAMES[k] ?? k}`)
             .join(" · ")}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** Report for this sheet: prepare (draft PDFs) → review → approve (queued for WhatsApp / email). */
+async function SheetReport({ submissionId, studentId, paperId, open }: { submissionId: string; studentId: string; paperId: string; open: number }) {
+  const [rcs, st] = await Promise.all([
+    epdb.reportCard.findMany({ where: { studentId, paperId }, orderBy: { audience: "desc" } }),
+    epdb.student.findUniqueOrThrow({ where: { id: studentId }, include: { parents: true } }),
+  ]);
+  const reachable = st.parents.some((p) => parentReachable(p));
+  const drafts = rcs.filter((r) => r.status === "draft");
+  return (
+    <section className="card space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <b>Report</b>
+        {open > 0 && <span className="text-xs text-muted">Mark all answers first ({open} left; give 0 for a blank answer).</span>}
+      </div>
+      {open === 0 && !rcs.length && (
+        <ActionButton action={sheetReportAction} fields={{ submissionId }} tone="primary">
+          Prepare report
+        </ActionButton>
+      )}
+      {rcs.length > 0 && (
+        <ul className="space-y-1 text-xs">
+          {rcs.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center gap-2">
+              <span className="w-28 font-semibold">{r.audience === "student" ? "Student report" : `Parent report (${r.language})`}</span>
+              <span className={r.status === "sent" ? "text-ok" : r.status === "failed" ? "text-bad" : "text-muted"}>{r.status === "draft" ? "to review" : r.status}</span>
+              {r.pdfPath && (
+                <a href={signedLink(r.pdfPath)} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                  Open PDF ↗
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {drafts.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <ActionButton action={refreshSheetReportAction} fields={{ submissionId }}>
+            Rebuild after changing marks
+          </ActionButton>
+          <ActionButton action={approveSheetReportAction} fields={{ submissionId }} tone="primary" confirm="Approve this report and put it in the send queue?">
+            Approve and queue for sending
+          </ActionButton>
+        </div>
+      )}
+      {rcs.some((r) => r.status !== "draft") && (
+        <Link href="/exam-prep/reports" className="text-xs text-accent hover:underline">
+          Send from Reports (WhatsApp queue) →
+        </Link>
+      )}
+      {!reachable && (
+        <p className="text-xs text-warn">
+          The parent&apos;s WhatsApp number isn&apos;t verified (or consent is missing), so there is no parent report and nothing can be queued for WhatsApp.{" "}
+          <Link href={`/exam-prep/students/${studentId}`} className="text-accent hover:underline">
+            Verify it on the student page
+          </Link>
+          .
         </p>
       )}
     </section>

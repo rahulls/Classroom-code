@@ -614,3 +614,45 @@ describe("uploaded paper with paper details: chapter view", () => {
     expect(by["Real Numbers"]).toMatchObject({ weight: 1, got: 1, max: 2, lostBy: { misread: 1 } });
   });
 });
+
+describe("report for one row-marked sheet", () => {
+  it("prepare → review PDFs → approve queues them; lost marks listed with question numbers; never twice", async () => {
+    const { setPaperRows, setRowMarks } = await import("../services/answer-rows");
+    const { generateSheetReports, approveSheetReports, refreshSheetReports } = await import("../services/reports");
+    const { addPaperFile } = await import("../services/papers");
+    await setSettings({ "analytics.strong": 100, "analytics.okay": 80, "analytics.average": 60 });
+    const p = await createPaper({ klass: 10, subject: "Maths", board: "CBSE", number: 51, uploadOnly: true, totalMarks: 10 });
+    await setPaperRows(p.id, "answer,max,section,chapter,choice\n1,1,A,Real Numbers,\n2,1,A,Polynomials,\n3.A,3,B,Polynomials,3\n3.B,3,B,Real Numbers,3\n4,5,C,Triangles,\n");
+    await addPaperFile(p.id, "paper", { name: "paper.pdf", bytes: await fakeSheet(1) });
+    await publishPaper(p.id);
+    const st = await student();
+    const sub = await addSubmission({ studentId: st.id, paperId: p.id, files: [{ name: "s.pdf", bytes: await fakeSheet() }], source: "form" });
+    await setRowMarks(sub.id, { "1": 1, "2": 0 }, { "2": "concept" });
+    await expect(generateSheetReports(sub.id)).rejects.toThrow(/not marked yet/);
+    await setRowMarks(sub.id, { "3.B": 1, "4": 3 }, { "3.B": "calculation", "4": "calculation" });
+    const g = await generateSheetReports(sub.id);
+    expect(g.created).toBeGreaterThanOrEqual(1);
+    expect((await generateSheetReports(sub.id)).created).toBe(0);
+    const rc = await epdb.reportCard.findFirstOrThrow({ where: { studentId: st.id, paperId: p.id, audience: "student" } });
+    const d = rc.data as { totals: { got: number; max: number }; lost: { tag: string; marks: number; questions: string[] }[]; chapter_breakdown: { chapter: string; band: string }[] };
+    expect(d.totals).toMatchObject({ got: 5, max: 10 });
+    expect(d.lost).toEqual([
+      { tag: "calculation", marks: 4, questions: ["3.B", "4"] },
+      { tag: "concept", marks: 1, questions: ["2"] },
+    ]);
+    // Real Numbers 2/4 (Q1 + attempted 3.B), Polynomials 0/1, Triangles 3/5 → Average at 60%
+    expect(Object.fromEntries(d.chapter_breakdown.map((c) => [c.chapter, c.band]))).toEqual({ "Real Numbers": "Needs support", Polynomials: "Needs support", Triangles: "Average" });
+    expect(storage.exists(rc.pdfPath!)).toBe(true);
+    // A marks change, then rebuild
+    await setRowMarks(sub.id, { "4": 5 });
+    expect(await refreshSheetReports(sub.id)).toBeGreaterThanOrEqual(1);
+    const d2 = (await epdb.reportCard.findUniqueOrThrow({ where: { id: rc.id } })).data as { totals: { got: number } };
+    expect(d2.totals.got).toBe(7);
+    // Approve: ready and queued for WhatsApp (needs a verified parent number)
+    await markVerified(st.parents[0]!.id);
+    const a = await approveSheetReports(sub.id);
+    expect(a.approved).toBeGreaterThanOrEqual(1);
+    expect(await epdb.message.count({ where: { templateKey: "student_report", studentId: st.id } })).toBe(1);
+    await expect(approveSheetReports(sub.id)).rejects.toThrow(/No draft reports/);
+  });
+});

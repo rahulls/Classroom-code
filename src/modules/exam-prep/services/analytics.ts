@@ -4,6 +4,7 @@ import { rankCohort } from "../domain/ranking";
 import { chapterBreakdown, classAverageByChapter, errorBreakdown, pct, repeatingGaps, roundPct, strongest, timeVsLoss, totals, trend, weakest, type ChapterRow } from "../domain/scoring";
 import { cutoffs, getSettings } from "../settings";
 import { chapterList } from "./papers";
+import { NO_CHAPTER, type AnswerRow } from "../domain/answer-rows";
 
 // R6 analytics, read from Mark joined to Question. All the maths is in domain/ (pure functions).
 // Group-level figures are hidden when the cohort is under the minimum size. This file never reads
@@ -16,25 +17,46 @@ async function paperQuestions(paperId: string) {
 
 /** One student's sheet for one paper: chapter rows, totals, strongest/weakest, error breakdown, time. */
 export async function sheetAnalytics(studentId: string, paperId: string) {
-  const sub = await epdb.submission.findFirst({ where: { studentId, paperId, isCurrent: true }, include: { marks: true } });
+  const sub = await epdb.submission.findFirst({ where: { studentId, paperId, isCurrent: true }, include: { marks: true, rowMarks: true } });
   if (!sub) return null;
   const s = await getSettings();
-  const { paper, qs } = await paperQuestions(paperId);
+  const { paper, qs: built } = await paperQuestions(paperId);
   const syllabus = await chapterList(paper.klass, paper.subject, paper.board);
-  const marks = Object.fromEntries(sub.marks.map((m) => [m.questionId, m.marksAwarded]));
+  // An uploaded paper is read from its answer rows (one "question" per row; for an OR choice, the attempted one)
+  const qs: { id: string; chapter: string; marks: number; type: string; section: string; number: number | string; text: string }[] = paper.uploadOnly ? uploadedItems(paper.answerRows, sub.rowMarks) : built;
+  const markOf = (id: string) => {
+    if (paper.uploadOnly) {
+      const m = sub.rowMarks.find((x) => x.label === id);
+      return m ? { awarded: m.marks, errorTag: m.errorTag, qualityNote: null as string | null } : null;
+    }
+    const m = sub.marks.find((x) => x.questionId === id);
+    return m ? { awarded: m.marksAwarded, errorTag: m.errorTag, qualityNote: m.qualityNote } : null;
+  };
+  const marks = Object.fromEntries(qs.map((q) => [q.id, markOf(q.id)?.awarded]));
   const rows = chapterBreakdown(qs, marks, syllabus, cutoffs(s));
   const t = totals(rows);
   const items = qs.map((q) => {
-    const m = sub.marks.find((x) => x.questionId === q.id);
-    return { ...q, awarded: m?.marksAwarded ?? 0, errorTag: m?.errorTag ?? "none", qualityNote: m?.qualityNote ?? null };
+    const m = markOf(q.id);
+    return { ...q, awarded: m?.awarded ?? 0, errorTag: m?.errorTag ?? "none", qualityNote: m?.qualityNote ?? null };
   });
+  // Where the marks were lost: per reason, the marks and the question numbers (always in the report)
+  const lostDetail: { tag: string; marks: number; questions: string[] }[] = [];
+  for (const it of items) {
+    const lost = it.marks - it.awarded;
+    if (lost <= 0) continue;
+    const tag = it.errorTag && it.errorTag !== "none" ? it.errorTag : "other";
+    const d = lostDetail.find((x) => x.tag === tag) ?? lostDetail[lostDetail.push({ tag, marks: 0, questions: [] }) - 1]!;
+    d.marks += lost;
+    d.questions.push(String(it.number));
+  }
+  lostDetail.sort((a, b) => (a.tag === "other" ? 1 : b.tag === "other" ? -1 : b.marks - a.marks));
   const lostBySection: Record<string, number> = {};
   for (const it of items) lostBySection[it.section] = (lostBySection[it.section] ?? 0) + Math.max(0, it.marks - it.awarded);
   // Redo list: the 5 questions with the most marks lost (weak chapters first)
   const weakSet = new Set(weakest(rows, 2).map((r) => r.chapter));
   const redo = [...items]
     .filter((i) => i.awarded < i.marks)
-    .sort((a, b) => Number(weakSet.has(b.chapter)) - Number(weakSet.has(a.chapter)) || b.marks - b.awarded - (a.marks - a.awarded) || a.number - b.number)
+    .sort((a, b) => Number(weakSet.has(b.chapter)) - Number(weakSet.has(a.chapter)) || b.marks - b.awarded - (a.marks - a.awarded) || String(a.number).localeCompare(String(b.number), "en", { numeric: true }))
     .slice(0, 5)
     .map((i) => ({ number: i.number, chapter: i.chapter, lost: i.marks - i.awarded }));
   return {
@@ -49,7 +71,26 @@ export async function sheetAnalytics(studentId: string, paperId: string) {
     quality: items.filter((i) => i.qualityNote).map((i) => ({ number: i.number, note: i.qualityNote! })),
     time: timeVsLoss(sub.sectionTimes as Record<string, number> | null, lostBySection),
     redo,
+    lostDetail,
   };
+}
+
+/** Answer rows of an uploaded paper as report items: one per row; an OR group gives the attempted alternative (or its first). */
+function uploadedItems(answerRows: unknown, rowMarks: { label: string }[]) {
+  const rows = (answerRows as AnswerRow[] | null) ?? [];
+  const marked = new Set(rowMarks.map((m) => m.label));
+  const seen = new Set<string>();
+  const out: { id: string; chapter: string; marks: number; type: string; section: string; number: string; text: string }[] = [];
+  for (const r of rows) {
+    let row = r;
+    if (r.choice) {
+      if (seen.has(r.choice)) continue;
+      seen.add(r.choice);
+      row = rows.find((x) => x.choice === r.choice && marked.has(x.label)) ?? r;
+    }
+    out.push({ id: row.label, chapter: row.chapter || NO_CHAPTER, marks: row.max, type: "row", section: row.section ?? "", number: row.label, text: "" });
+  }
+  return out;
 }
 
 /** A student's papers in one subject (oldest first) with the overall and per-chapter trend and repeating gaps. */
@@ -59,7 +100,7 @@ export async function studentHistory(studentId: string, subject: string) {
   const papers: { paperId: string; number: number; rows: ChapterRow[]; pct: number }[] = [];
   for (const sub of subs) {
     const a = await sheetAnalytics(studentId, sub.paperId);
-    if (!a || !a.submission.marks.length) continue;
+    if (!a || !(a.submission.marks.length || a.submission.rowMarks.length)) continue;
     papers.push({ paperId: sub.paperId, number: sub.paper.number, rows: a.rows, pct: a.totals.pct });
   }
   const chapters = [...new Set(papers.flatMap((p) => p.rows.map((r) => r.chapter)))];

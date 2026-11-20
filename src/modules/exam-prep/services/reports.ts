@@ -36,7 +36,12 @@ const L = {
     action: "Suggested action",
     revision: "A revision session on {chapter} is available for any student who wants it.",
     correction: "Correction",
-    bands: { Strong: "Strong", Okay: "Okay", "Needs support": "Needs support" } as Record<string, string>,
+    bands: { Strong: "Strong", Okay: "Okay", Average: "Average", "Needs support": "Needs support" } as Record<string, string>,
+    lostTitle: (n: number) => `Where the ${n} marks were lost`,
+    lostQ: "Questions",
+    other: "Other",
+    book: "Book a 1:1 session to go through this report in detail.",
+    allFull: "No marks lost on this paper.",
     cohort: { "Top third": "Top third", Middle: "Middle", "Needs support": "Needs support" } as Record<string, string>,
     tags: { concept: "Concept", calculation: "Calculation", missing_steps: "Missing steps", misread: "Misread question" } as Record<string, string>,
     tasks: (w: string[]) => [`Redo the listed questions without looking at the key.`, `Re-read your notes on ${w.join(" and ")} and solve 5 textbook questions from each.`, `Check your redo answers against Friday's worked solutions.`],
@@ -62,7 +67,12 @@ const L = {
     action: "सुझाया गया कदम",
     revision: "{chapter} पर रिवीज़न सत्र किसी भी छात्र के लिए उपलब्ध है।",
     correction: "सुधार",
-    bands: { Strong: "मज़बूत", Okay: "ठीक", "Needs support": "मदद चाहिए" } as Record<string, string>,
+    bands: { Strong: "मज़बूत", Okay: "ठीक", Average: "औसत", "Needs support": "मदद चाहिए" } as Record<string, string>,
+    lostTitle: (n: number) => `${n} अंक कहाँ कटे`,
+    lostQ: "प्रश्न",
+    other: "अन्य",
+    book: "इस रिपोर्ट को विस्तार से समझने के लिए 1:1 सत्र बुक करें।",
+    allFull: "इस पेपर में कोई अंक नहीं कटा।",
     cohort: { "Top third": "ऊपरी तिहाई", Middle: "बीच में", "Needs support": "मदद की ज़रूरत" } as Record<string, string>,
     tags: { concept: "अवधारणा", calculation: "गणना", missing_steps: "चरण छूटे", misread: "प्रश्न गलत पढ़ा" } as Record<string, string>,
     tasks: (w: string[]) => [`सूची के प्रश्न बिना उत्तर-कुंजी देखे दोबारा हल करें।`, `${w.join(" और ")} के नोट्स दोबारा पढ़ें और हर अध्याय से 5 प्रश्न हल करें।`, `शुक्रवार के हल से अपने उत्तर मिलाएँ।`],
@@ -99,6 +109,8 @@ async function reportData(studentId: string, paperId: string, audience: Audience
     quality: paid ? a.quality.slice(0, 4) : null,
     time: paid ? a.time : null,
     corrections: corrections.map((c) => ({ id: c.id, note: c.note })),
+    lost: a.lostDetail,
+    contact: s["brand.contact"],
     lang,
   };
 }
@@ -125,13 +137,25 @@ export function reportHtml(d: ReportData, audience: Audience, s: Settings, compa
     }${d.classBand ? `<h2>${t.classBand}</h2><p>${esc(t.cohort[d.classBand] ?? d.classBand)}</p>` : ""}</div></div>`);
   }
   if (!compact && d.paid) {
-    const err = Object.entries(d.errors ?? {})
+    // The lost-marks box already says this when present
+    const err = Object.entries(d.lost ? {} : (d.errors ?? {}))
       .map(([k, v]) => `${esc(t.tags[k] ?? k)}: ${v}`)
       .join(" · ");
     if (err) blocks.push(`<h2>${t.errors}</h2><p>${err}</p>`);
     if (d.quality?.length) blocks.push(`<h2>${t.quality}</h2><ul>${d.quality.map((q) => `<li>Q${q.number}: ${esc(q.note)}</li>`).join("")}</ul>`);
     if (d.time?.length) blocks.push(`<h2>${t.time}</h2><p>${d.time.map((x) => `${esc(x.section)}: ${x.minutes ?? "?"} min, ${x.lost} lost`).join(" · ")}</p>`);
   }
+  if (d.lost) {
+    const total = d.lost.reduce((x, l) => x + l.marks, 0);
+    blocks.unshift(
+      total
+        ? `<div class="lost"><h2>${esc(t.lostTitle(total))}</h2><table>${d.lost
+            .map((l) => `<tr><td class="lm">${l.marks}</td><td><b>${esc(l.tag === "other" ? t.other : (t.tags[l.tag] ?? l.tag))}</b><br><span class="muted">${t.lostQ}: ${l.questions.map((q) => "Q" + esc(q)).join(", ")}</span></td></tr>`)
+            .join("")}</table></div>`
+        : `<p class="muted">${t.allFull}</p>`,
+    );
+  }
+  blocks.push(`<div class="book"><b>${esc(t.book)}</b> ${esc(d.contact ?? "")}</div>`);
   if (d.corrections.length) blocks.push(`<p class="muted"><b>${t.correction}:</b> ${d.corrections.map((c) => esc(c.note)).join(" ")}</p>`);
   const body = `<h1>${esc(audience === "student" ? t.student : t.parent)}: ${esc(d.student.name)}</h1>
 <p class="muted">${esc(s["brand.tuitionName"])} · Class ${d.student.klass} ${esc(d.student.board)} · ${esc(d.paper.subject)} · ${esc(d.paper.id)}</p>
@@ -164,9 +188,17 @@ export async function generateReports(paperId: string) {
   if (!["marked", "reported"].includes(paper.status)) throw new EpError("Finish marking first (the paper must be marked).");
   const subs = await epdb.submission.findMany({ where: { paperId, isCurrent: true, NOT: { flags: { has: "late_no_report" } } }, include: { student: { include: { parents: true } } } });
   let created = 0;
-  for (const sub of subs) {
+  for (const sub of subs) created += await sheetReports(sub, paper, s);
+  return { created, total: await epdb.reportCard.count({ where: { paperId } }) };
+}
+
+/** The student report and one parent report per reachable guardian for one sheet (each made once). */
+async function sheetReports(sub: { student: { id: string; code: string; status: string; parents: Parameters<typeof parentReachable>[0][] & { id: string; language: string }[] } }, paper: { id: string }, s: Settings) {
+  const paperId = paper.id;
+  let created = 0;
+  {
     const st = sub.student;
-    if (st.status === "opted_out") continue;
+    if (st.status === "opted_out") return 0;
     const targets: { audience: Audience; parentId: string; lang: "en" | "hi" }[] = [{ audience: "student", parentId: STUDENT_KEY, lang: "en" }];
     for (const p of st.parents) if (parentReachable(p)) targets.push({ audience: "parent", parentId: p.id, lang: p.language as "en" | "hi" });
     for (const tgt of targets) {
@@ -184,7 +216,47 @@ export async function generateReports(paperId: string) {
       }
     }
   }
-  return { created, total: await epdb.reportCard.count({ where: { paperId } }) };
+  return created;
+}
+
+// ------------------------------ one sheet at a time (uploaded papers marked row by row) ------------------------------
+
+async function markedSheet(submissionId: string) {
+  const sub = await epdb.submission.findUnique({ where: { id: submissionId }, include: { paper: true, rowMarks: true, student: { include: { parents: true } } } });
+  if (!sub) throw new EpError("Sheet not found.");
+  if (!sub.paper.uploadOnly) throw new EpError("This paper is built question by question: generate its reports from the paper page after Finish marking.");
+  const { sheetScore } = await import("../domain/answer-rows");
+  const sc = sheetScore((sub.paper.answerRows as never) ?? [], sub.rowMarks);
+  if (!sc.max) throw new EpError("Add the paper details first.");
+  if (sc.open) throw new EpError(`${sc.open} answer${sc.open === 1 ? " is" : "s are"} not marked yet. Mark every answer (0 for a blank one) before the report.`);
+  return sub;
+}
+
+/** Draft reports (student + each reachable parent) for one fully marked sheet. */
+export async function generateSheetReports(submissionId: string) {
+  const s = await getSettings();
+  const sub = await markedSheet(submissionId);
+  const created = await sheetReports(sub, sub.paper, s);
+  await audit({ action: "report.generated", entity: "Submission", entityId: submissionId, new: { created } });
+  return { created, parents: sub.student.parents.filter((p) => parentReachable(p)).length };
+}
+
+/** After a marks change: rebuilds this sheet's unsent reports from the current marks. */
+export async function refreshSheetReports(submissionId: string) {
+  const sub = await markedSheet(submissionId);
+  const rcs = await epdb.reportCard.findMany({ where: { studentId: sub.studentId, paperId: sub.paperId, status: { not: "sent" } } });
+  for (const rc of rcs) await regenerateReport(rc.id);
+  return rcs.length;
+}
+
+/** The teacher approved this sheet's reports: ready, and queued for sending straight away. */
+export async function approveSheetReports(submissionId: string) {
+  const sub = await markedSheet(submissionId);
+  const r = await epdb.reportCard.updateMany({ where: { studentId: sub.studentId, paperId: sub.paperId, status: "draft" }, data: { status: "ready" } });
+  if (!r.count) throw new EpError("No draft reports for this sheet. Prepare the report first.");
+  await audit({ action: "report.approved", entity: "Submission", entityId: submissionId, new: { reports: r.count } });
+  const d = await deliverReports();
+  return { approved: r.count, ...d };
 }
 
 /** The teacher approves a paper's reports: they become ready to deliver and the paper is "reported". */

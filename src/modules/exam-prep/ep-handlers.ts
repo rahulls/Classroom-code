@@ -622,3 +622,23 @@ export const rowMarksAction = epAction(z.object({ submissionId: id }).catchall(z
   const r = await setRowMarks(v.submissionId, marks, tags);
   return done(`Saved. ${r.got} / ${r.max}${r.open ? ` · ${r.open} answer${r.open === 1 ? "" : "s"} not marked yet` : " · fully marked"}.`);
 });
+
+// ------------------------------ reports for one sheet (uploaded papers) ------------------------------
+
+export const sheetReportAction = epAction(z.object({ submissionId: id }), async (v) => {
+  const { generateSheetReports } = await import("./services/reports");
+  const r = await generateSheetReports(v.submissionId);
+  return done(r.created ? `Report ready to review (${r.created} PDF${r.created === 1 ? "" : "s"}).${r.parents ? "" : " No parent report: the parent's number isn't verified yet."}` : "The reports already exist. Use Refresh if you changed marks.");
+});
+
+export const refreshSheetReportAction = epAction(z.object({ submissionId: id }), async (v) => {
+  const { refreshSheetReports } = await import("./services/reports");
+  const n = await refreshSheetReports(v.submissionId);
+  return done(n ? `Rebuilt ${n} report${n === 1 ? "" : "s"} from the current marks.` : "Nothing to rebuild (sent reports are kept as sent).");
+});
+
+export const approveSheetReportAction = epAction(z.object({ submissionId: id }), async (v) => {
+  const { approveSheetReports } = await import("./services/reports");
+  const r = await approveSheetReports(v.submissionId);
+  return done(`Approved. ${r.queued} queued for WhatsApp${r.emailed ? `, ${r.emailed} emailed` : ""}: send them from Reports.`);
+});

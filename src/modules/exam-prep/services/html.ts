@@ -19,11 +19,15 @@ h2 { font-size: 12pt; margin: 4mm 0 1.5mm; color: #2a1260; }
 .muted { color: #6b6585; font-size: 9pt; }
 .row { display: flex; gap: 6mm; }
 .box { border: 1px solid #ddd6f3; border-radius: 3mm; padding: 3mm 4mm; flex: 1; }
+.lost { border: 2px solid #e8590c; background: #fff4e6; border-radius: 3mm; padding: 2mm 4mm 3mm; margin: 3mm 0; }
+.lost h2 { color: #c2410c; margin-top: 1mm; } .lost table { width: 100%; } .lost td { border: 0; padding: 1mm 2mm; vertical-align: top; }
+.lost .lm { width: 12mm; font-size: 16pt; font-weight: 700; color: #c2410c; text-align: right; }
+.book { margin-top: 4mm; border-radius: 3mm; background: #2a1260; color: #fff; padding: 3mm 4mm; font-size: 10pt; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 1.2mm 2mm; border-bottom: 1px solid #ece8f8; font-size: 9.5pt; vertical-align: top; }
 th { background: #f4f1fc; }
 .pill { display: inline-block; padding: 0.3mm 2.5mm; border-radius: 3mm; font-size: 8.5pt; font-weight: 600; }
-.Strong { background: #dcf5e3; color: #11643a; } .Okay { background: #fff3cf; color: #7a5600; } .Needs { background: #fde2e2; color: #8c1d1d; }
+.Strong { background: #dcf5e3; color: #11643a; } .Okay { background: #fff3cf; color: #7a5600; } .Average { background: #ffe6cc; color: #8a4500; } .Needs { background: #fde2e2; color: #8c1d1d; }
 .bar { height: 2.2mm; background: #ece8f8; border-radius: 1mm; overflow: hidden; } .bar > i { display: block; height: 100%; background: #7a2fc0; }
 .q { margin: 0 0 3mm; page-break-inside: avoid; } .opts { margin: 1mm 0 0 6mm; }
 .footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 8pt; color: #6b6585; border-top: 1px solid #ece8f8; padding-top: 1mm; background: #fff; }

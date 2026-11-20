@@ -45,6 +45,7 @@ export const SETTINGS = {
   // Analytics
   "analytics.strong": { group: "Analytics", label: "Strong band from (%)", schema: pct, default: 75 },
   "analytics.okay": { group: "Analytics", label: "Okay band from (%)", schema: pct, default: 50 },
+  "analytics.average": { group: "Analytics", label: "Average band from (%), below Okay (0 = no Average band)", schema: pct, default: 0 },
   "analytics.lowScore": { group: "Analytics", label: "Low-score wording below (%)", schema: pct, default: 35 },
   "analytics.gapBelow": { group: "Analytics", label: "Repeating gap: chapter below (%)", schema: pct, default: 50 },
   "analytics.gapPapers": { group: "Analytics", label: "Repeating gap: in this many papers", schema: z.number().int().min(2).max(10), default: 2 },
@@ -190,4 +191,4 @@ export async function setSetting<K extends SettingKey>(key: K, value: unknown) {
   await audit({ action: "setting.changed", entity: "Setting", entityId: key, old: isSecret ? "(secret)" : (old?.value ?? null), new: isSecret ? "(secret)" : parsed.data });
 }
 
-export const cutoffs = (s: Settings) => ({ strong: s["analytics.strong"], okay: s["analytics.okay"] });
+export const cutoffs = (s: Settings) => ({ strong: s["analytics.strong"], okay: s["analytics.okay"], average: s["analytics.average"] });

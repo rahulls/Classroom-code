@@ -307,3 +307,13 @@ describe("paper details: chapter analysis", async () => {
     expect([...w.values()].reduce((a, b) => a + b, 0)).toBe(80);
   });
 });
+
+describe("optional Average band", async () => {
+  const { band } = await import("../domain/scoring");
+  it("100 Strong, 80 Okay, 60 Average, below Needs support; off when not set", () => {
+    const c = { strong: 100, okay: 80, average: 60 };
+    expect([100, 99, 80, 79, 60, 59.9].map((p) => band(p, c))).toEqual(["Strong", "Okay", "Okay", "Average", "Average", "Needs support"]);
+    expect(band(60, { strong: 75, okay: 50 })).toBe("Okay");
+    expect(band(40, { strong: 75, okay: 50, average: 0 })).toBe("Needs support");
+  });
+});

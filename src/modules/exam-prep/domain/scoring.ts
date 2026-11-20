@@ -1,8 +1,9 @@
 // Pure scoring and chapter analytics (R5 MCQ scoring, R6). No I/O, no dates from the clock.
 
 export type QItem = { id: string; chapter: string; marks: number; type?: string; correctOption?: string | null };
-export type Band = "Strong" | "Okay" | "Needs support";
-export type BandCutoffs = { strong: number; okay: number };
+export type Band = "Strong" | "Okay" | "Average" | "Needs support";
+/** average: optional fourth band between Okay and Needs support (0 or unset = off) */
+export type BandCutoffs = { strong: number; okay: number; average?: number };
 export const DEFAULT_CUTOFFS: BandCutoffs = { strong: 75, okay: 50 };
 
 /** Percentage rounded half-up for display (37.5 → 38, 66.67 → 67). Bands use the exact value. */
@@ -14,6 +15,7 @@ export const pct = (got: number, max: number) => (max > 0 ? (100 * got) / max : 
 export function band(p: number, c: BandCutoffs = DEFAULT_CUTOFFS): Band {
   if (p >= c.strong - 1e-9) return "Strong";
   if (p >= c.okay - 1e-9) return "Okay";
+  if (c.average && c.average < c.okay && p >= c.average - 1e-9) return "Average";
   return "Needs support";
 }
 
