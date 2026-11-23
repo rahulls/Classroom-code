@@ -24,6 +24,8 @@ export function middleware(req: NextRequest) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src 'self'${dev ? " ws: wss:" : ""}`,
+    // Chaos Creators' recording deck plays back a take straight from the browser's recorder (a blob: URL)
+    ...(req.nextUrl.pathname.startsWith("/chaos") ? ["media-src 'self' blob:"] : []),
     sameOriginFrames ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
     sameOriginFrames ? "frame-src 'self'" : "frame-src 'none'",
     sameOriginFrames ? "object-src 'self'" : "object-src 'none'",

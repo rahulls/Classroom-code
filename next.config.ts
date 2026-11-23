@@ -32,6 +32,8 @@ const nextConfig: NextConfig = {
       // Exam Prep's marking screen frames the answer-sheet PDF from its own origin; everything else is never framed
       { source: "/((?!exam-prep).*)", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
       { source: "/exam-prep/:path*", headers: [{ key: "X-Frame-Options", value: "SAMEORIGIN" }] },
+      // Chaos Creators' facts recording deck records the reader with the microphone (this site only; camera etc. stay off)
+      { source: "/chaos/:path*", headers: [{ key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()" }] },
     ];
   },
 };

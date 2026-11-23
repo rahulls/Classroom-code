@@ -1,0 +1,2 @@
+3D stickers: Microsoft Fluent Emoji (3D style), MIT License, https://github.com/microsoft/fluentui-emoji
+Names -> files in stickers.json. Used by the Edu video engine (scenes.py).

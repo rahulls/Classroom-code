@@ -26,21 +26,25 @@ export default async function ChaosDashboardPage({ searchParams }: { searchParam
   const d = templateDefaults();
   const jobs = listJobs();
   const csvs = listCsvLibrary(jobs);
+  const csvOf = new Map(csvs.flatMap((c) => c.videoIds.map((id) => [id, c.name] as const)));
   const conn = youtubeConnection();
   const rows: VideoRow[] = jobs.map((j) => {
     const upload = getUpload(j.id);
     const marks = getMarks(j.id);
-    const lines = j.settings.title_lines?.length ? j.settings.title_lines : d.titleLines;
+    // Facts videos (Did-you-know) have their own defaults in facts_video.py
+    const facts = j.kind === "facts";
+    const lines = j.settings.title_lines?.length ? j.settings.title_lines : facts ? ["Amazing", "Facts"] : d.titleLines;
     return {
       id: j.id,
       createdAt: j.createdAt,
       title: j.title,
       csvName: j.fileName ?? null,
+      libraryCsv: csvOf.get(j.id) ?? null,
       format: j.format,
       questions: j.questions,
-      badge: j.settings.quiz_badge || d.badge,
+      badge: j.settings.quiz_badge || (facts ? "AMAZING FACTS" : d.badge),
       badgeIsDefault: !j.settings.quiz_badge,
-      introTag: j.settings.intro_badge || d.introTag,
+      introTag: j.settings.intro_badge || (facts ? "DID YOU KNOW?" : d.introTag),
       introTitle: lines.join(" / "),
       introIsDefault: !j.settings.intro_badge && !j.settings.title_lines?.length,
       seconds: j.settings.timer_seconds ?? null,

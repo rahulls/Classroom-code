@@ -1,0 +1,22 @@
+{
+  "title": "How ChatGPT Actually Writes Its Answers",
+  "kicker": "AI EXPLAINED",
+  "voice": "af_heart",
+  "speed": 1.0,
+  "prompt": "Why is the sky blue?",
+  "tokens": ["Why", " is", " the", " sky", " blue", "?"],
+  "answer_start": "The sky looks blue because",
+  "choices": [["sunlight", 0.46], ["air", 0.21], ["light", 0.14], ["tiny", 0.08]],
+  "answer_more": [" sunlight", " scatters", " off", " air", " molecules", "..."],
+  "scenes": [
+    {"id": "hook", "say": "ChatGPT doesn't look up its answers. It writes them one tiny piece at a time. Here's how."},
+    {"id": "tokens", "say": "First, your message is chopped into tokens, small chunks of text."},
+    {"id": "numbers", "say": "Each token becomes a long list of numbers that stores its meaning."},
+    {"id": "attention", "say": "Next comes attention. Every token looks at the others to see what matters. Here, blue connects strongly to sky."},
+    {"id": "layers", "say": "This repeats through dozens of layers, each one building a deeper understanding."},
+    {"id": "predict", "say": "Then it scores every possible next token, and picks a likely one."},
+    {"id": "loop", "say": "It adds that token and runs the whole process again, word after word, until the answer is done."},
+    {"id": "training", "say": "It learned this by reading huge amounts of text and guessing the next word, over and over, tuning billions of numbers called parameters. Then human feedback taught it to be helpful."},
+    {"id": "outro", "say": "So it's not magic. It's prediction, at a massive scale. Follow Chaos Creators for more."}
+  ]
+}

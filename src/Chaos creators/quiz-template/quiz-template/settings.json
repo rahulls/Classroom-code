@@ -21,5 +21,7 @@
   "timer_text": "Think fast!",
 
   "voice": "af_heart",
-  "voice_lang": "en-us"
+  "voice_lang": "en-us",
+
+  "voice_pack": "kid voice sounds"
 }

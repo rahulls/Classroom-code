@@ -11,6 +11,7 @@ random. If a folder is empty, the engine uses its built-in synthetic sound inste
 | `outro/`    | sting under "Thanks for watching"                | 3–9 s       |
 | `whoosh/`   | transition into each question (up to 3 rotate)   | 0.3–1.2 s   |
 | `music/<mood>/` | quiet background tune under the whole video, looped and dipped under the voice. Moods: `upbeat` (default), `epic`, `suspense`; chosen in the studio or with a CSV line `Music mood,epic` | any |
+| `kid voice sounds/` | recorded kid voice, on by default (studio "Kid voice" tick box, CSV line `Kid voice,off` to skip): `1_intro/FULL_intro` or `2_intro_alternative/FULL_intro_alternative` as the intro; a `5_mixture/` middle line before question 3 or 4 of a Short (about every 5 questions in long videos: `mix_06` halfway, `mix_07` almost there, `mix_04` before question 11); the ending is `3_ending/` lines 01, 02, 03, 07 in a Short and `FULL_ending_assembled` in long videos. Every voice clip (recorded or AI) is levelled to the same speech loudness | any |
 | `unused/`   | parked files the engine never plays              |             |
 
 **Credits:** Creative Commons (CC BY) tracks need their credit line in `CREDITS.json`

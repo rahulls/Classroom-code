@@ -31,3 +31,10 @@ Thumbs.db
 
 # Chaos Creators: finished videos (big files; kept out of git)
 /src/Chaos creators/videos/
+
+# Edu videos: finished videos (private on YouTube; big files) and Python caches
+/src/Edu videos/videos/
+__pycache__/
+
+# Recorded kid voice clips: personal recordings, never in the (public) repo
+/src/Chaos creators/sounds/kid voice sounds/

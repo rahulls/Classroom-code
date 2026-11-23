@@ -11,6 +11,38 @@ export async function createVideoAction(prev: ActionState, fd: FormData): Promis
   return h.createVideoAction(prev, fd);
 }
 
+export async function createFactsVideoAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.createFactsVideoAction(prev, fd);
+}
+
+export async function saveRecordingAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.saveRecordingAction(prev, fd);
+}
+
+export async function setIntroOutroAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.setIntroOutroAction(prev, fd);
+}
+
+export async function deleteRecordingAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.deleteRecordingAction(prev, fd);
+}
+
+export async function editCardAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.editCardAction(prev, fd);
+}
+
+export async function makeFactsVideoAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.makeFactsVideoAction(prev, fd);
+}
+
+export async function deleteDraftAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.deleteDraftAction(prev, fd);
+}
+
+export async function generateFactsAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.generateFactsAction(prev, fd);
+}
+
 export async function generateQuizAction(prev: ActionState, fd: FormData): Promise<ActionState> {
   return h.generateQuizAction(prev, fd);
 }
@@ -23,6 +55,18 @@ export async function stopVideoAction(prev: ActionState, fd: FormData): Promise<
   return h.stopVideoAction(prev, fd);
 }
 
+export async function continueCanvaAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.continueCanvaAction(prev, fd);
+}
+
+export async function uploadYourPictureAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.uploadYourPictureAction(prev, fd);
+}
+
+export async function makeVideoNowAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.makeVideoNowAction(prev, fd);
+}
+
 export async function deleteVideoAction(prev: ActionState, fd: FormData): Promise<ActionState> {
   return h.deleteVideoAction(prev, fd);
 }
@@ -33,6 +77,14 @@ export async function markVideoAction(prev: ActionState, fd: FormData): Promise<
 
 export async function discardCsvAction(prev: ActionState, fd: FormData): Promise<ActionState> {
   return h.discardCsvAction(prev, fd);
+}
+
+export async function saveUsageSettingsAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.saveUsageSettingsAction(prev, fd);
+}
+
+export async function emailUsageReportAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.emailUsageReportAction(prev, fd);
 }
 
 export async function disconnectCanvaAction(prev: ActionState, fd: FormData): Promise<ActionState> {

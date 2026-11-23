@@ -278,9 +278,16 @@ class Sounds:
         return out if count > 1 else out[0]
 
 
+# Rahul (2026-11-22): no background music in any video, quiz or facts. He adds music himself
+# afterwards to avoid copyright claims. Sound effects and voices are unaffected.
+BACKGROUND_MUSIC = False
+
+
 def music_bed(sounds, cfg, total, voice_spans):
     """A background tune under the whole video: looped, faded, kept low and dipped further
     while the narrator speaks. settings.music_volume (default 1.0) scales it; 0 turns it off."""
+    if not BACKGROUND_MUSIC:
+        return None
     vol = float(cfg.get("music_volume", 1.0) or 0)
     mood = str(cfg.get("music_mood") or "upbeat").lower()
     if vol <= 0 or not sounds.on or mood == "off":
@@ -292,6 +299,14 @@ def music_bed(sounds, cfg, total, voice_spans):
     if not pool:
         pool = sound_pool("music")
     sounds.r.shuffle(pool)
+    # settings.music_track = "suspense/The Closest Thing - National Sweetheart.mp3" pins one tune
+    track = str(cfg.get("music_track") or "").strip()
+    if track:
+        pinned = root / track
+        if pinned.is_file():
+            pool = [pinned]
+        else:
+            print(f"[sounds] music_track not found: {track}; picking at random", flush=True)
     for p in pool:
         try:
             s = decode_sound(p)
@@ -304,11 +319,14 @@ def music_bed(sounds, cfg, total, voice_spans):
         reps = int(np.ceil(n / len(s)))
         m = np.tile(s, reps)[:n]
         rms = float(np.sqrt(np.mean(s ** 2))) + 1e-6
-        m = m * (0.045 * vol / rms)                     # about -27 dBFS average
+        m = m * (0.035 * vol / rms)                     # about -29 dBFS average, well under the voices (-18 dB)
+        # Dip the music to a quarter (-12 dB) while anyone speaks (narrator or kid recordings), starting
+        # a little before each line and releasing a little after, so every word is heard clearly
         duck = np.ones(n, np.float32)
+        low = float(cfg.get("music_duck", 0.25))
         for a, b in voice_spans:
-            duck[int(a * SR):int(b * SR)] = 0.45
-        k = int(0.25 * SR)                              # smooth the dips
+            duck[max(0, int((a - 0.15) * SR)):int((b + 0.25) * SR)] = low
+        k = int(0.3 * SR)                               # smooth the dips
         duck = np.convolve(duck, np.ones(k, np.float32) / k, mode="same")
         fi, fo = min(n, int(1.5 * SR)), min(n, int(2.5 * SR))
         m[:fi] *= np.linspace(0, 1, fi)
@@ -389,6 +407,28 @@ def popsnd():
     return (np.sin(2 * np.pi * (500 + 2500 * tt / 0.12) * tt) * np.exp(-tt * 35) * 0.35).astype(np.float32)
 
 
+VOICE_LEVEL_DB = -18.0   # speech loudness every voice clip (AI or recorded) is set to
+
+
+def level_voice(s, target_db=VOICE_LEVEL_DB):
+    """Sets a voice clip's speech loudness (RMS of its 50 ms windows within 30 dB of the loudest,
+    so pauses don't count) to target_db, so the kid recordings and the AI narrator sound equally
+    loud. A soft limiter keeps shouted peaks under 0.95 instead of clipping."""
+    s = s.astype(np.float32)
+    w = int(0.05 * SR)
+    n = len(s) // w
+    if n < 1:
+        return s
+    r = np.sqrt((s[:n * w].reshape(n, w) ** 2).mean(1) + 1e-12)
+    speech = r[r > r.max() * 10 ** (-30 / 20)]
+    level = 20 * np.log10(np.sqrt((speech ** 2).mean()) + 1e-12)
+    s = s * np.float32(10 ** ((target_db - level) / 20))
+    knee = 0.7
+    over = np.abs(s) > knee
+    s[over] = np.sign(s[over]) * (knee + 0.25 * np.tanh((np.abs(s[over]) - knee) / 0.25))
+    return s.astype(np.float32)
+
+
 class Voice:
     def __init__(self, cfg, models_dir):
         from kokoro_onnx import Kokoro
@@ -402,12 +442,97 @@ class Voice:
         s, sr = self.tts.create(text, voice=self.voice, speed=speed, lang=self.lang)
         n = int(len(s) * SR / sr)
         s = np.interp(np.linspace(0, len(s) - 1, n), np.arange(len(s)), s).astype(np.float32)
-        s = s / (np.abs(s).max() + 1e-6) * 0.85
+        s = level_voice(s)
         self.cache[text] = s
         return s
 
 
-def build_timeline(cfg, qs, voice, job, sounds=None, ranks=None):
+class KidVoice:
+    """Human (kid) recordings from sounds/<pack>/ that replace the AI narrator's intro and ending
+    and add "middle lines" before some questions. settings.voice_pack = "kid voice sounds" turns it
+    on; the AI voice still says "Question N." (no recordings of the numbers yet).
+    Folders: 1_intro/ (FULL_intro), 2_intro_alternative/ (FULL_intro_alternative), 3_ending/ (single
+    lines + FULL_ending_assembled), 5_mixture/ (middle lines). Picks are random per video (seed)."""
+
+    # Middle lines by file name: where each one makes sense
+    ANYWHERE = ("mix_03", "mix_05")             # "you're doing great", "okay this one's tricky"
+    HALFWAY, ALMOST, TEN_DOWN = "mix_06", "mix_07", "mix_04"
+    # A Short's ending: wrap, ask the score, comments, bye (about 6 s; the full ending is 18 s)
+    SHORT_ENDING = ("ending_01", "ending_02", "ending_03", "ending_07_")
+
+    def __init__(self, pack, seed, fmt):
+        self.dir = SOUNDS_DIR / pack
+        if not self.dir.is_dir():
+            raise ValueError(f"Voice pack folder not found: sounds/{pack}")
+        self.r = random.Random(f"{seed}-kid")
+        self.fmt = fmt
+        self.used = []
+
+    def _file(self, prefix):
+        files = sorted(p for p in self.dir.rglob("*") if p.suffix.lower() in SOUND_EXT and p.name.startswith(prefix))
+        return files[0] if files else None
+
+    def _load(self, path):
+        s = decode_sound(path)
+        loud = np.flatnonzero(np.abs(s) > np.abs(s).max() * 0.03)
+        if len(loud):                               # trim silence at both ends
+            s = s[max(0, loud[0] - int(0.02 * SR)):loud[-1] + int(0.08 * SR)]
+        self.used.append(path.name)
+        return level_voice(s)
+
+    def _join(self, paths, gap=0.25):
+        parts = [self._load(p) for p in paths if p]
+        if not parts:
+            return None
+        sil = np.zeros(int(gap * SR), np.float32)
+        out = [parts[0]]
+        for p in parts[1:]:
+            out += [sil, p]
+        return np.concatenate(out)
+
+    def intro(self):
+        return self._join([self._file(self.r.choice(["FULL_intro.", "FULL_intro_alternative."]))])
+
+    def ending(self):
+        if self.fmt == "youtube":
+            return self._join([self._file("FULL_ending_assembled")])
+        return self._join([self._file(p) for p in self.SHORT_ENDING])
+
+    def middle_plan(self, n):
+        """{question index: clip} for the questions that get a middle line before them.
+        Shorts: one line, before question 3 or 4. Long videos: about every 5 questions, using
+        "halfway", "almost there" and "10 down" where they fit."""
+        if n < 3:
+            return {}
+        if self.fmt != "youtube":
+            qi = self.r.choice([i for i in (2, 3) if i < n])
+            fit = list(self.ANYWHERE) + ([self.HALFWAY] if qi == n // 2 else []) + ([self.ALMOST] if qi >= n - 2 else [])
+            return {qi: self._load(self._file(self.r.choice(fit)))}
+        plan = {}
+        if n >= 12:
+            plan[10] = self.TEN_DOWN
+        plan.setdefault(n // 2, self.HALFWAY)
+        plan.setdefault(n - 2 if n >= 8 else n - 1, self.ALMOST)
+        generic = list(self.ANYWHERE)
+        for qi in range(5, n - 2, 5):
+            if all(abs(qi - k) >= 3 for k in plan):
+                plan[qi] = generic[len(plan) % len(generic)]
+        return {qi: self._load(self._file(name)) for qi, name in sorted(plan.items()) if 0 < qi < n}
+
+
+def active_rms(x, frame=0.02):
+    """Loudness of the parts that actually sound (frames within 20 dB of the loudest), so pauses
+    in a recording don't make it look quieter than it is."""
+    n = int(frame * SR)
+    if len(x) < n:
+        return float(np.sqrt(np.mean(x ** 2))) if len(x) else 0.0
+    f = x[:len(x) // n * n].reshape(-1, n)
+    e = np.sqrt((f ** 2).mean(1))
+    keep = e[e >= e.max() * 0.1]
+    return float(np.sqrt(np.mean(keep ** 2))) if len(keep) else 0.0
+
+
+def build_timeline(cfg, qs, voice, job, sounds=None, ranks=None, kid=None):
     """Events (what is on screen when) and the full audio mix.
     Library sounds (sounds/<kind>/) replace the built-in synthetic ones when present."""
     N = len(qs)
@@ -415,11 +540,14 @@ def build_timeline(cfg, qs, voice, job, sounds=None, ranks=None):
     fmt = lambda s: (s.replace("{n}", str(N)).replace("{seconds}", str(secs)).replace("{channel}", cfg["channel_name"])
                      .replace("{topic}", cfg.get("topic", "General Knowledge quiz")))
     events, audio, spans = [], [], []
+    voices, kid_spans = [], []                          # speech on its own track; where kid lines play
     add = lambda at, s: audio.append((at, s))
 
-    def say_at(at, s):
-        add(at, s)
+    def say_at(at, s, is_kid=False):
+        voices.append((at, s))
         spans.append((at, at + len(s) / SR))
+        if is_kid:
+            kid_spans.append((at, at + len(s) / SR, active_rms(s)))
 
     sounds = sounds or Sounds({"sounds": "off"}, 0)
     OPT_DELAY, HOLD = float(cfg.get("options_delay", 2.0)), float(cfg.get("answer_hold", 3.0))
@@ -438,9 +566,13 @@ def build_timeline(cfg, qs, voice, job, sounds=None, ranks=None):
         add(0.1, riser(SLAM - 0.1))
         add(SLAM, impact())
     job.progress("voice", 0, N + 2, "Recording the narration", force=True)
-    intro_vo = voice.say(fmt(cfg["intro_voice"]))
+    intro_vo = kid.intro() if kid else None
+    intro_kid = intro_vo is not None
+    if intro_vo is None:
+        intro_vo = voice.say(fmt(cfg["intro_voice"]))
+    middles = kid.middle_plan(N) if kid else {}
     VO_AT = SLAM + 0.9
-    say_at(VO_AT, intro_vo)
+    say_at(VO_AT, intro_vo, intro_kid)
     t = max(VO_AT + len(intro_vo) / SR + 1.0, 7.5)
     events.append(dict(kind="intro", start=0, end=t, phase2=VO_AT + 1.6, slam=SLAM))
 
@@ -456,8 +588,12 @@ def build_timeline(cfg, qs, voice, job, sounds=None, ranks=None):
         job.progress("voice", qi + 1, N + 2, "Recording the narration")
         seg = dict(kind="q", idx=qi, q=q, start=t, cd=q["seconds"])
         add(t, whooshes[qi % len(whooshes)])
-        say_at(t + 0.3, voice.say(cfg.get("question_voice", "Question {q}.").replace("{q}", str(qi + 1))))
-        seg["opt_t"] = ot = t + 0.3 + OPT_DELAY
+        lead = 0.0
+        if qi in middles:                               # a kid's "halfway there!" before the number
+            say_at(t + 0.3, middles[qi], True)
+            lead = len(middles[qi]) / SR + 0.35
+        say_at(t + 0.3 + lead, voice.say(cfg.get("question_voice", "Question {q}.").replace("{q}", str(qi + 1))))
+        seg["opt_t"] = ot = t + 0.3 + lead + OPT_DELAY
         add(ot, POP)
         seg["cd_start"] = ot + 0.3
         for k in range(seg["cd"]):
@@ -478,24 +614,51 @@ def build_timeline(cfg, qs, voice, job, sounds=None, ranks=None):
         events.append(dict(kind="ranks", when="end", start=t, end=end))
         t = end
 
-    outro_vo = voice.say(fmt(cfg["outro_voice"]))
+    outro_vo = kid.ending() if kid else None
+    outro_kid = outro_vo is not None
+    if outro_vo is None:
+        outro_vo = voice.say(fmt(cfg["outro_voice"]))
     add(t + 0.1, whooshes[0] if len(whooshes) else whoosh())
     if outro_sting is not None:
         add(t + 0.2, outro_sting)
     else:
         add(t + 0.3, impact() * 0.6)
-    say_at(t + 0.7, outro_vo)
+    say_at(t + 0.7, outro_vo, outro_kid)
     events.append(dict(kind="outro", start=t, end=t + 0.7 + len(outro_vo) / SR + 1.8))
     total = events[-1]["end"]
 
-    mix = np.zeros(int((total + 2) * SR), np.float32)
-    for at, s in audio:
-        i = int(at * SR)
-        mix[i:i + len(s)] += s[:len(mix) - i]
-    mix = mix[:int(total * SR)]
+    def track(items):
+        out = np.zeros(int((total + 2) * SR), np.float32)
+        for at, s in items:
+            i = int(at * SR)
+            out[i:i + len(s)] += s[:len(out) - i]
+        return out[:int(total * SR)]
+    rest = track(audio)                                 # music, stings, ticks, applause...
     bed = music_bed(sounds, cfg, total, spans)
     if bed is not None:
-        mix[:len(bed)] += bed
+        rest[:len(bed)] += bed
+    speech = track(voices)
+    # While a kid line plays, everything else is held at no more than half the kid's volume
+    # (settings.kid_bed_ratio, default 0.5), measured line by line, with short fades in and out
+    ratio = float(cfg.get("kid_bed_ratio", 0.5))
+    gain = np.ones(len(rest), np.float32)
+    fade = int(0.15 * SR)
+    for a, b, krms in kid_spans:
+        i0, i1 = max(0, int(a * SR)), min(len(rest), int(b * SR))
+        if i1 <= i0:
+            continue
+        orms = active_rms(rest[i0:i1])
+        if orms <= 1e-6 or orms <= ratio * krms:
+            continue
+        g = ratio * krms / orms
+        print(f"[kid] {a:6.1f}-{b:6.1f}s: rest of the sound lowered to {g:.2f} (half the kid's level)", flush=True)
+        lo, hi = max(0, i0 - fade), min(len(rest), i1 + fade)
+        env = np.ones(hi - lo, np.float32)
+        env[i0 - lo:i1 - lo] = g
+        env[:i0 - lo] = np.linspace(1, g, i0 - lo)
+        env[i1 - lo:] = np.linspace(g, 1, hi - i1)
+        gain[lo:hi] = np.minimum(gain[lo:hi], env)
+    mix = speech + rest * gain
     mix /= max(1.0, np.abs(mix).max() / 0.95)
     return events, mix, total, fmt
 
@@ -1311,7 +1474,12 @@ def main(job_dir):
     bands = rank_bands(len(qs), ranks) if ranks else []
     if bands:
         print("[ranks] " + ", ".join(f"{b['lo']}-{b['hi']} {b['name']}" for b in bands), flush=True)
-    events, mix, total, _ = build_timeline(cfg, qs, voice, job, sounds, ranks)
+    # Human recordings (quiz-template settings.json "voice_pack"; a video's "voice_pack": "off" skips them)
+    pack = str(cfg.get("voice_pack") or "").strip()
+    kid = KidVoice(pack, seed, fmt_name) if pack and pack.lower() != "off" else None
+    events, mix, total, _ = build_timeline(cfg, qs, voice, job, sounds, ranks, kid)
+    if kid:
+        sounds.used["voice_pack"] = kid.used
     print(f"[sounds] {sounds.used or 'built-in'}", flush=True)
     print(f"[time] narration + sound in {time.time() - t0:.1f}s", flush=True)
 
@@ -1379,8 +1547,11 @@ def main(job_dir):
     # A first thumbnail design (the page can make new ones). Never fails the video.
     job.progress("finish", nf, nf, "Designing the thumbnail", force=True)
     canva_thumb = False
-    if use_canva:
+    # Every video asks Canva for a thumbnail (canva/thumbnail-p*.png); if it isn't ready yet, the web
+    # app swaps it in when it arrives
+    if any((pathlib.Path(job.dir) / "canva").glob("thumbnail-p*.png")):
         try:
+            import canva_images
             canva_thumb = canva_images.make_thumbnail(job.dir)
         except Exception:
             print("[canva] thumbnail: " + traceback.format_exc(), flush=True)

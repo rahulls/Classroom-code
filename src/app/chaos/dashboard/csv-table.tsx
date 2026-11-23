@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CsvEntry } from "@/modules/chaos/jobs";
+import { csvViewHref, makeVideoHref } from "../csv/links";
 import { Filter, Tick, isUploaded, type Marks, type OnMark } from "./parts";
 import { UploadButton, type VideoRow } from "./video-table";
 
@@ -83,9 +84,10 @@ export function CsvTable({
           <thead>
             <tr>
               <th>CSV file</th>
-              <th className="text-right">Questions</th>
+              <th className="text-right">Rows</th>
               <th className="whitespace-nowrap">Changed</th>
               <th>Videos made from it</th>
+              <th>CSV</th>
               <th>Discard</th>
             </tr>
           </thead>
@@ -96,17 +98,22 @@ export function CsvTable({
               return (
                 <tr key={c.name} className={`align-top ${gone ? "opacity-50" : ""}`}>
                   <td className="min-w-[12rem]">
-                    <span className="font-medium">{c.name}</span>
+                    <Link href={csvViewHref(c.name)} className="font-medium hover:text-accent hover:underline" title="View this CSV">
+                      {c.name}
+                    </Link>
+                    {c.kind === "facts" && <span className="ml-1.5 rounded-full bg-[#7a2fc0]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#7a2fc0] dark:text-[#d9c8ff]">💡 Facts</span>}
                     {c.videoName && <span className="block text-xs text-muted">{c.videoName}</span>}
                     {c.problems > 0 && <span className="block text-xs text-bad">{c.problems} problem{c.problems === 1 ? "" : "s"} to fix</span>}
                   </td>
-                  <td className="text-right tabular-nums">{c.questions}</td>
+                  <td className="text-right tabular-nums" title={c.kind === "facts" ? "facts" : "questions"}>
+                    {c.questions}
+                  </td>
                   <td className="whitespace-nowrap">{fmtDay(c.modifiedAt)}</td>
                   <td className="min-w-[22rem]">
                     {videos.length ? (
                       <ul className="space-y-1.5">
                         {videos.map((r) => {
-                          const [label, color] = STAGE[r.stage] ?? [`Making ${r.percent}%`, "text-warn"];
+                          const [label, color] = STAGE[r.stage] ?? [r.stage === "pictures" ? "Waiting for your pictures" : r.stage === "canva" ? `Canva designs ${r.percent}%` : `Making ${r.percent}%`, "text-warn"];
                           const viaStudio = !!r.youtube && r.youtube !== "uploading";
                           const vDisc = !!marks[r.id]?.discarded;
                           return (
@@ -138,10 +145,24 @@ export function CsvTable({
                         })}
                       </ul>
                     ) : (
-                      <Link href="/chaos" className="text-xs text-warn hover:underline">
-                        No video yet. Make one →
-                      </Link>
+                      <span className="text-xs text-warn">No video yet</span>
                     )}
+                  </td>
+                  <td>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Link href={csvViewHref(c.name)} className="btn whitespace-nowrap px-2 py-1 text-xs">
+                        👁 View
+                      </Link>
+                      {c.problems > 0 ? (
+                        <Link href={csvViewHref(c.name)} className="btn whitespace-nowrap px-2 py-1 text-xs opacity-60" title="This CSV has problems: open it to see them">
+                          ▶ Make video
+                        </Link>
+                      ) : (
+                        <Link href={makeVideoHref(c.name, c.kind)} className="btn btn-primary whitespace-nowrap px-2 py-1 text-xs" title="Open the studio with this CSV loaded">
+                          ▶ Make video
+                        </Link>
+                      )}
+                    </div>
                   </td>
                   <td>
                     <Tick label="Discard" checked={gone} onChange={(v) => onDiscardCsv(c.name, v)} />
@@ -151,7 +172,7 @@ export function CsvTable({
             })}
             {!shown.length && (
               <tr>
-                <td colSpan={5} className="py-6 text-center text-muted">
+                <td colSpan={6} className="py-6 text-center text-muted">
                   {csvs.length ? "No CSVs match the filters." : "No CSVs in the csv folder yet."}
                 </td>
               </tr>

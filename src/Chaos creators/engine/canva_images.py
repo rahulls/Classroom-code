@@ -125,7 +125,12 @@ def make_thumbnail(job_dir):
             break
     tmp.replace(job_dir / "thumbnail.jpg")
     st = status(job_dir) or {}
-    (job_dir / "thumbnail.json").write_text(json.dumps(dict(canva=True, page=found[0].name, width=W, height=H, design=(st.get("designs") or {}).get("thumbnail"))), encoding="utf-8")
+    try:  # the thumbnail is made on its own track (canva/thumbnail-status.json)
+        ts = json.loads((job_dir / "canva" / "thumbnail-status.json").read_text(encoding="utf-8"))
+    except Exception:
+        ts = {}
+    design = ts.get("design") or (st.get("designs") or {}).get("thumbnail")
+    (job_dir / "thumbnail.json").write_text(json.dumps(dict(canva=True, page=found[0].name, width=W, height=H, design=design)), encoding="utf-8")
     return True
 
 

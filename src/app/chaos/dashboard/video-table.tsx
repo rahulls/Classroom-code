@@ -6,6 +6,7 @@ import { fmtDuration, type VideoFormat } from "@/modules/chaos/csv";
 import type { JobStage, MusicCheck } from "@/modules/chaos/jobs";
 import type { UploadState } from "@/modules/chaos/youtube";
 import type { YoutubeDefaults } from "../videos/[id]/youtube-panel";
+import { csvViewHref } from "../csv/links";
 import { Filter, Tick, isUploaded, type Marks, type OnMark } from "./parts";
 
 export type VideoRow = {
@@ -13,6 +14,8 @@ export type VideoRow = {
   createdAt: string;
   title: string;
   csvName: string | null;
+  /** The file in the csv folder this video was made from (for the CSV page), if it's still there */
+  libraryCsv: string | null;
   format: VideoFormat;
   questions: number;
   badge: string;
@@ -35,7 +38,7 @@ export type VideoRow = {
 type Col = { key: string; label: string; value: (r: VideoRow, m: Marks) => string | number | null; className?: string };
 
 const STAGE_LABEL: Record<string, string> = { done: "Ready", error: "Failed", stopped: "Stopped" };
-const statusText = (r: VideoRow) => STAGE_LABEL[r.stage] ?? `Making ${r.percent}%`;
+const statusText = (r: VideoRow) => STAGE_LABEL[r.stage] ?? (r.stage === "pictures" ? "Waiting for your pictures" : r.stage === "canva" ? `Canva designs ${r.percent}%` : `Making ${r.percent}%`);
 const youtubeText = (r: VideoRow) => (r.youtube === "uploading" ? "Uploading" : r.youtube ? `Uploaded (${r.youtube.privacy})` : "");
 
 const COLS: Col[] = [
@@ -142,9 +145,20 @@ export function VideoTable({ rows, marks, onMark, onUpload }: { rows: VideoRow[]
                   )}
                 </td>
                 <td className="min-w-[8rem]">
-                  <a href={`/chaos/videos/${r.id}/csv`} download className="text-accent hover:underline" title="Download the CSV">
-                    {r.csvName ?? <span className="text-muted">questions.csv</span>}
-                  </a>
+                  {r.libraryCsv ? (
+                    <span className="flex items-center gap-1.5">
+                      <Link href={csvViewHref(r.libraryCsv)} className="text-accent hover:underline" title="View the CSV (and make another video from it)">
+                        {r.csvName ?? r.libraryCsv}
+                      </Link>
+                      <a href={`/chaos/videos/${r.id}/csv`} download className="text-xs text-muted hover:text-accent" title="Download the CSV this video was made from" aria-label="Download the CSV">
+                        ⬇
+                      </a>
+                    </span>
+                  ) : (
+                    <a href={`/chaos/videos/${r.id}/csv`} download className="text-accent hover:underline" title="Download the CSV">
+                      {r.csvName ?? <span className="text-muted">questions.csv</span>}
+                    </a>
+                  )}
                 </td>
                 <td className="whitespace-nowrap">{r.format === "shorts" ? "Shorts" : "YouTube"}</td>
                 <td className="text-right tabular-nums">{r.questions}</td>

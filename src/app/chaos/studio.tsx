@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ActionForm, FormMessage, Req, SubmitButton } from "@/components/form";
 import { createVideoAction, generateQuizAction, saveClaudeKeyAction } from "@/modules/chaos/actions";
 import {
@@ -9,7 +9,6 @@ import {
   FORMATS,
   GENERATE_COUNTS,
   MAX_CSV_BYTES,
-  MUSIC_MOODS,
   VOICES,
   estimateSeconds,
   fmtDuration,
@@ -18,12 +17,13 @@ import {
   rankBands,
   type VideoFormat,
 } from "@/modules/chaos/csv";
+import { detectCsvType } from "@/modules/chaos/facts";
 
 const LONG_COUNTS = [50, 100, 150];
 const SHORT_COUNTS = [5, 10, 15];
 
 /** Upload + preview the questions CSV, choose the format and style, then create the video. */
-export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: boolean; canva: boolean }) {
+export function Studio({ busy, claudeKey, canva, initial }: { busy: boolean; claudeKey: boolean; canva: boolean; initial?: { name: string; content: string } }) {
   const [csv, setCsv] = useState("");
   const [fileName, setFileName] = useState("");
   const [readError, setReadError] = useState("");
@@ -34,6 +34,7 @@ export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: b
   const [secondsFixed, setSecondsFixed] = useState(false);
   const [drag, setDrag] = useState(false);
   const [mood, setMood] = useState<string>("upbeat");
+  const [kidVoice, setKidVoice] = useState(true);
   // Rank table at the start and end of long videos
   const [ranksOn, setRanksOn] = useState(true);
   const [ranks, setRanks] = useState("");
@@ -96,6 +97,10 @@ export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: b
       setMood(st.musicMood);
       filled.push("music mood");
     }
+    if (st.kidVoice !== undefined) {
+      setKidVoice(st.kidVoice);
+      filled.push("kid voice");
+    }
     if (st.ranks) {
       const off = st.ranks[0] === "off";
       setRanksOn(!off);
@@ -104,6 +109,15 @@ export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: b
     }
     setFromCsv(filled);
   };
+
+  // Opened from the dashboard's "Make video": that CSV is already loaded, as if uploaded
+  const loaded = useRef(false);
+  useEffect(() => {
+    if (!initial || loaded.current) return;
+    loaded.current = true;
+    applyCsv(initial.content, initial.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
 
   const counts = format === "youtube" ? LONG_COUNTS : SHORT_COUNTS;
   const pickFormat = (f: VideoFormat) => {
@@ -137,7 +151,7 @@ export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: b
             {csv ? "Choose another CSV" : "Upload questions CSV"}
           </button>
           <input ref={input} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void load(e.target.files?.[0])} />
-          <span className="text-sm text-muted">{fileName ? <b className="text-[#2a1260]">{fileName}</b> : "or drop the file here"}</span>
+          <span className="text-sm text-muted">{fileName ? <b className="text-[#2a1260] dark:text-[#d9c8ff]">{fileName}</b> : "or drop the file here"}</span>
           <a href="/chaos/sample.csv" className="ml-auto text-sm text-accent hover:underline">
             Download a sample CSV
           </a>
@@ -146,6 +160,15 @@ export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: b
           Columns: <code>question, option_a, option_b, option_c, option_d, answer</code> (A–D), <code>fact</code> (“Did you know?”, optional), <code>seconds</code> (optional timer for that question). Optional lines above the header fill step 3: <code>Video name</code>, <code>Badge on every question</code>, <code>Intro tag</code>, <code>Intro title line 1</code>, <code>Intro title line 2</code>, <code>Seconds per question</code>, <code>Music mood</code>, <code>Ranks</code> (see the sample).
         </p>
         {readError && <p className="mt-2 text-sm text-bad">{readError}</p>}
+        {csv && detectCsvType(csv) === "facts" && (
+          <p className="mt-2 rounded bg-warn/10 px-3 py-2 text-sm text-warn">
+            This is a facts CSV (Did-you-know video).{" "}
+            <a href="/chaos?type=facts" className="font-medium underline">
+              Open the Facts video tab
+            </a>{" "}
+            and upload it there.
+          </p>
+        )}
         <Generator hasKey={claudeKey} onCsv={applyCsv} csv={csv} fileName={fileName} />
 
         {parsed && (
@@ -277,6 +300,12 @@ export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: b
               }}
             />
           </Field>
+          <Field label="Kid voice" hint="Recorded kid lines for the intro, the ending and a cheer before some questions (sounds\kid voice sounds). The AI narrator says the question numbers.">
+            <label className="flex h-[38px] items-center gap-2 text-sm">
+              <input type="checkbox" name="kidVoice" value="1" checked={kidVoice} onChange={(e) => setKidVoice(e.target.checked)} />
+              Use the kid voice recordings
+            </label>
+          </Field>
           <Field label="Narrator voice">
             <select name="voice" className="input w-full" defaultValue="af_heart">
               {VOICES.map((v) => (
@@ -286,14 +315,10 @@ export function Studio({ busy, claudeKey, canva }: { busy: boolean; claudeKey: b
               ))}
             </select>
           </Field>
-          <Field label="Background music" hint="A random track of this mood from the sounds folder. Intro, background and ending screens are picked at random too.">
-            <select name="musicMood" className="input w-full" value={mood} onChange={(e) => setMood(e.target.value)}>
-              {MUSIC_MOODS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+          <Field label="Background music">
+            <p className="py-2 text-sm text-muted" data-mood={mood}>
+              None. Videos are made without music, so add your own when you edit (avoids copyright claims).
+            </p>
           </Field>
         </div>
         {format === "youtube" && (
@@ -355,16 +380,16 @@ function isMathsQuiz(s: { title: string; quizBadge: string; titleLine1: string; 
   return /math|ganit|गणित/i.test([s.quizBadge, s.title, s.titleLine1, s.titleLine2].join(" "));
 }
 
-function Step({ n, title }: { n: number; title: string }) {
+export function Step({ n, title }: { n: number; title: string }) {
   return (
-    <h2 className="mb-3 flex items-center gap-2 font-semibold text-[#2a1260]">
+    <h2 className="mb-3 flex items-center gap-2 font-semibold text-[#2a1260] dark:text-[#d9c8ff]">
       <span className="grid h-6 w-6 place-items-center rounded-full bg-[#ffb300] text-xs font-bold text-[#1e0e4a]">{n}</span>
       {title}
     </h2>
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <span className="label">{label}</span>
@@ -374,7 +399,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function CountChip({ active, disabled, onClick, label, title }: { active: boolean; disabled?: boolean; onClick: () => void; label: string; title?: string }) {
+export function CountChip({ active, disabled, onClick, label, title }: { active: boolean; disabled?: boolean; onClick: () => void; label: string; title?: string }) {
   return (
     <button
       type="button"

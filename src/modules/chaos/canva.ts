@@ -9,6 +9,7 @@ import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } fr
 import { UserError } from "@/core/action";
 import { decrypt, encrypt } from "@/core/crypto";
 import { CHAOS_HOME } from "./jobs";
+import { assertCanvaBudget, trackCanva } from "./usage";
 
 // Chaos Creators ↔ Canva. The studio talks to Canva's MCP server (the same one Claude uses) with
 // its own Canva login: "Connect Canva" runs the OAuth sign-in once, and the tokens (refreshed
@@ -20,6 +21,15 @@ const SERVER = "https://mcp.canva.com/mcp";
 export const CANVA_CALLBACK_PATH = "/chaos/canva/callback";
 /** Rahul's Canva folder "Chaos Creators - Video Templates": every design the studio makes goes here. */
 const FOLDER = process.env.CHAOS_CANVA_FOLDER || "FAHbNKpGaH0";
+/**
+ * Plain black one-page designs (1080x1920 and 1920x1080) in Rahul's Canva account. A picture is put
+ * on a copy of one and exported: ordinary Canva editing, not an AI action (24 Nov 2026), so a
+ * picture costs one AI action (the image) instead of two (image + an AI-made page).
+ */
+const PICTURE_PAGE = {
+  vertical: process.env.CHAOS_CANVA_PAGE_VERTICAL || "DAHbwslVxs4",
+  wide: process.env.CHAOS_CANVA_PAGE_WIDE || "DAHbwiuy29g",
+};
 const P_KEY = "chaos.canva.oauth";
 
 type Stored = {
@@ -195,12 +205,21 @@ type JobAnswer = {
  * About 1–2 minutes.
  */
 export async function canvaDesign(brief: string, format: string, client?: Client, references?: string[]): Promise<{ designId: string; url?: string; pages: Buffer[] }> {
+  assertCanvaBudget(1);
+  return trackCanva("design", () => designNow(brief, format, client, references));
+}
+
+async function designNow(brief: string, format: string, client?: Client, references?: string[]): Promise<{ designId: string; url?: string; pages: Buffer[] }> {
   const c = client ?? (await connect());
   try {
     let job = await call<JobAnswer>(c, "create-design", { brief, format, ...(references?.length ? { references } : {}) });
     const started = Date.now();
     while (!job.design) {
-      if (job.status && /fail|error/i.test(job.status)) throw new UserError(`Canva couldn't make the design (${job.status}).`);
+      if (job.status && /fail|error/i.test(job.status)) {
+        // Canva's own reason (e.g. a refused topic) matters for deciding whether to try again
+        const why = job.error ? (typeof job.error === "string" ? job.error : JSON.stringify(job.error)).slice(0, 200) : "";
+        throw new UserError(`Canva couldn't make the design (${job.status})${why ? `: ${why}` : "."}`);
+      }
       if (Date.now() - started > 6 * 60_000) throw new UserError("Canva took more than 6 minutes. Try again.");
       if (!job.job_id || !job.continuation_token) throw new UserError("Canva didn't start the design.");
       await wait(Math.max(5, job.polling_policy?.wait_seconds ?? 10) * 1000 + 500);
@@ -209,19 +228,49 @@ export async function canvaDesign(brief: string, format: string, client?: Client
     }
     const designId = job.design.id;
     await call(c, "move-item-to-folder", { item_id: designId, to_folder_id: FOLDER }).catch((e) => console.error("[canva] couldn't file the design", e));
-    const exp = await call<{ job?: { status?: string; urls?: string[] } }>(c, "export-design", { design_id: designId, format: { type: "png" } });
-    const urls = exp.job?.urls ?? [];
-    if (!urls.length) throw new UserError("Canva didn't export the design.");
-    const pages: Buffer[] = [];
-    for (const u of urls) {
-      const r = await fetch(u); // export links must be used exactly as given
-      if (!r.ok) throw new UserError(`Couldn't download Canva's export (${r.status}).`);
-      pages.push(Buffer.from(await r.arrayBuffer()));
-    }
-    return { designId, url: job.design.url, pages };
+    return { designId, url: job.design.url, pages: await exportPng(c, designId) };
   } finally {
     if (!client) await c.close().catch(() => {});
   }
+}
+
+/** A design's pages as PNG (exporting is free). */
+async function exportPng(c: Client, designId: string): Promise<Buffer[]> {
+  const exp = await call<{ job?: { status?: string; urls?: string[] } }>(c, "export-design", { design_id: designId, format: { type: "png" } });
+  const urls = exp.job?.urls ?? [];
+  if (!urls.length) throw new UserError("Canva didn't export the design.");
+  const pages: Buffer[] = [];
+  for (const u of urls) {
+    const r = await fetch(u); // export links must be used exactly as given
+    if (!r.ok) throw new UserError(`Couldn't download Canva's export (${r.status}).`);
+    pages.push(Buffer.from(await r.arrayBuffer()));
+  }
+  return pages;
+}
+
+/** The image on a copy of a plain page of the right shape, exported full size. No AI. */
+async function onPlainPage(c: Client, media: string, vertical: boolean): Promise<Buffer[]> {
+  const copy = await call<{ design?: { id: string } }>(c, "copy-design", { design_id: vertical ? PICTURE_PAGE.vertical : PICTURE_PAGE.wide });
+  const id = copy.design?.id;
+  if (!id) throw new UserError("Canva didn't copy the picture page.");
+  const read = await call<{ transaction?: { transaction_id?: string }; page_metadata?: { id: string; dimensions: { width: number; height: number } }[] }>(c, "read-design", {
+    design_id: id,
+    open_transaction: true,
+    filter: { fields: ["page_metadata"] },
+  });
+  const tx = read.transaction?.transaction_id;
+  const page = read.page_metadata?.[0];
+  if (!tx || !page) throw new UserError("Canva didn't open the picture page.");
+  const { width, height } = page.dimensions;
+  await call(c, "edit-design", {
+    transaction_id: tx,
+    page_index: 1,
+    finalize: "keep_open",
+    operations: [{ type: "insert_fill", page_id: page.id, asset_type: "image", asset_id: media, alt_text: "Picture", top: 0, left: 0, width, height }],
+  });
+  await call(c, "edit-design", { transaction_id: tx, finalize: "commit" });
+  await call(c, "move-item-to-folder", { item_id: id, to_folder_id: FOLDER }).catch((e) => console.error("[canva] couldn't file the picture", e));
+  return exportPng(c, id);
 }
 
 export async function withCanva<T>(fn: (client: Client) => Promise<T>): Promise<T> {
@@ -237,6 +286,11 @@ type ImageJob = { jobId?: string; status?: string; result?: { results?: { type: 
 
 /** Canva's AI image generator: returns the new image's Canva media id (about 20–60 s). */
 export async function canvaImage(prompt: string, aspectRatio: "PORTRAIT_9_16" | "LANDSCAPE_16_9", client: Client): Promise<string> {
+  assertCanvaBudget(1);
+  return trackCanva("image", () => imageNow(prompt, aspectRatio, client));
+}
+
+async function imageNow(prompt: string, aspectRatio: "PORTRAIT_9_16" | "LANDSCAPE_16_9", client: Client): Promise<string> {
   const start = await call<ImageJob>(client, "generate-image", { prompt, aspectRatio });
   if (!start.jobId) throw new UserError("Canva didn't start the picture.");
   const t0 = Date.now();
@@ -252,11 +306,28 @@ export async function canvaImage(prompt: string, aspectRatio: "PORTRAIT_9_16" | 
 
 /**
  * A full-size picture: Canva's image tool only hands back a small preview, so the image is put on
- * a one-page design of its own (one image per design: with several, Canva's AI mixes them up)
- * and exported. Returns the exported pages (the caller skips blank ones).
+ * a copy of a plain page (PICTURE_PAGE, no AI) and exported; only if that fails, on a page Canva's
+ * AI makes. One AI action per picture (the image). Returns the exported pages.
  */
-export async function canvaPicture(prompt: string, vertical: boolean, client: Client): Promise<Buffer[]> {
-  const media = await canvaImage(prompt, vertical ? "PORTRAIT_9_16" : "LANDSCAPE_16_9", client);
+export async function canvaPicture(prompt: string, vertical: boolean, client: Client, mediaFile?: string): Promise<Buffer[]> {
+  // mediaFile keeps the image Canva already made: when only the full-size page failed, a retry
+  // makes just the page again and never pays for the image twice
+  let media = "";
+  try {
+    if (mediaFile) media = fs.readFileSync(mediaFile, "utf8").trim();
+  } catch {
+    /* no image yet */
+  }
+  if (!media) {
+    media = await canvaImage(prompt, vertical ? "PORTRAIT_9_16" : "LANDSCAPE_16_9", client);
+    if (mediaFile) fs.writeFileSync(mediaFile, media, "utf8");
+  }
+  try {
+    return await onPlainPage(client, media, vertical);
+  } catch (e) {
+    // e.g. a template page was deleted: Canva's AI makes the page instead (one more AI action)
+    console.warn("[canva] plain page didn't work, asking Canva's AI for the page:", e instanceof Error ? e.message : e);
+  }
   const d = await canvaDesign(
     "A single page showing only the reference image, filling the entire page edge to edge. Nothing else: no text, no shapes, no logos, no borders.",
     vertical ? "Your Story" : "Presentation (16:9)",

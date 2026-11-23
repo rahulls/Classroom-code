@@ -11,8 +11,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const redirectUri = redirectUriFor(req.headers);
   const raw = /(?:^|;\s*)chaos_yt_state=([^;]+)/.exec(req.headers.get("cookie") ?? "")?.[1] ?? "";
-  const [expected = "", backEnc = ""] = raw.split(".");
-  const back = decodeURIComponent(backEnc || "%2Fchaos%2Fyoutube");
+  const [expected = "", backEnc = "", chan = ""] = raw.split(".");
+  const channel = chan === "edu" ? "edu" : "chaos";
+  const home = channel === "edu" ? "/edu/settings" : "/chaos/youtube";
+  const back = decodeURIComponent(backEnc || encodeURIComponent(home));
   const clear = `${STATE_COOKIE}=; Path=/chaos/youtube; HttpOnly; SameSite=Lax; Max-Age=0${COOKIE_SECURE ? "; Secure" : ""}`;
   const go = (path: string, params: Record<string, string>) => {
     const to = new URL(path, redirectUri);
@@ -22,17 +24,17 @@ export async function GET(req: Request) {
 
   const state = url.searchParams.get("state") ?? "";
   const ok = expected.length > 0 && state.length === expected.length && timingSafeEqual(Buffer.from(state), Buffer.from(expected));
-  if (!ok) return go("/chaos/youtube", { yt: "error", msg: "The sign-in took too long or came from somewhere else. Click Connect YouTube again." });
+  if (!ok) return go(home, { yt: "error", msg: "The sign-in took too long or came from somewhere else. Click Connect YouTube again." });
   const err = url.searchParams.get("error");
-  if (err) return go("/chaos/youtube", { yt: "error", msg: err === "access_denied" ? "You didn't allow access, so nothing was connected." : `Google said: ${err}` });
+  if (err) return go(home, { yt: "error", msg: err === "access_denied" ? "You didn't allow access, so nothing was connected." : `Google said: ${err}` });
   const code = url.searchParams.get("code");
-  if (!code) return go("/chaos/youtube", { yt: "error", msg: "Google didn't send a sign-in code." });
+  if (!code) return go(home, { yt: "error", msg: "Google didn't send a sign-in code." });
   try {
-    const channel = await finishConnect(code, redirectUri);
-    await audit({ action: "chaos.youtube.connected", actor: user, entity: "chaos_youtube", entityId: "channel", after: { channel } });
+    const title = await finishConnect(code, redirectUri, channel);
+    await audit({ action: channel === "edu" ? "edu.youtube.connected" : "chaos.youtube.connected", actor: user, entity: channel === "edu" ? "edu_youtube" : "chaos_youtube", entityId: "channel", after: { channel: title } });
     return go(back, { yt: "connected" });
   } catch (e) {
     console.error("[chaos youtube connect]", e);
-    return go("/chaos/youtube", { yt: "error", msg: e instanceof UserError ? e.message : "Couldn't finish connecting. Try again." });
+    return go(home, { yt: "error", msg: e instanceof UserError ? e.message : "Couldn't finish connecting. Try again." });
   }
 }

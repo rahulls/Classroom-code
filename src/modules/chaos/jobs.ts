@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { IMAGE_NAME_RE, parseQuizCsv, type QuizQuestion, type VideoFormat } from "./csv";
+import { detectCsvType, parseFactsCsv, type FactItem } from "./facts";
 
 // Chaos Creators video jobs. Nothing goes in the database: each job is a folder under
 // %LOCALAPPDATA%\RSC Classroom\chaos\jobs\<id> (outside OneDrive, videos are big) holding
@@ -16,6 +17,8 @@ const JOBS = path.join(CHAOS_HOME, "jobs");
 export const PYTHON = path.join(CHAOS_HOME, "venv", process.platform === "win32" ? "Scripts\\python.exe" : "bin/python");
 const ENGINE = path.join(process.cwd(), "src", "Chaos creators", "engine", "quiz_video.py");
 const THUMBNAILER = path.join(path.dirname(ENGINE), "thumbnail.py");
+/** "Did you know?" facts videos: their own engine (it imports quiz_video.py's helpers) */
+const FACTS_ENGINE = path.join(path.dirname(ENGINE), "facts_video.py");
 export const ENGINE_DIR = path.dirname(ENGINE);
 export const CHAOS_ASSETS = path.join(process.cwd(), "src", "Chaos creators");
 /**
@@ -66,8 +69,12 @@ export type JobSettings = {
   title_lines?: string[];
   timer_seconds?: number;
   voice?: string;
+  /** Human voice recordings: a folder in src\Chaos creators\sounds, or "off" for the AI narrator only */
+  voice_pack?: string;
   /** Background music folder (sounds/music/<mood>), "random" or "off" */
   music_mood?: string;
+  /** one tune from sounds\music, e.g. "suspense/The Closest Thing - National Sweetheart.mp3"; else random from the mood */
+  music_track?: string;
   /** Rank titles, lowest score first, or ["off"] (long videos only) */
   ranks?: string[];
   /** Topic photo for the thumbnail: a file in src\Chaos creators\images */
@@ -80,6 +87,10 @@ export type JobSettings = {
 
 export type JobSpec = {
   id: string;
+  /** "facts" = a Did-you-know facts video (facts_video.py); missing = a quiz video. `questions` then counts facts. */
+  kind?: "quiz" | "facts";
+  /** Facts videos: who read the facts */
+  narration?: "ai" | "record";
   title: string;
   format: VideoFormat;
   questions: number;
@@ -91,9 +102,12 @@ export type JobSpec = {
   /** Name of the video's copy in videos\ (without .mp4 / .jpg) */
   exportName?: string;
   pid?: number;
+  /** When the engine started, if later than createdAt (Canva's designs were made first) */
+  engineStartedAt?: string;
 };
 
-export type JobStage = "queued" | "voice" | "render" | "finish" | "done" | "error" | "stopped";
+/** "canva": Canva's designs are being made first (the engine starts once they're all in) */
+export type JobStage = "canva" | "pictures" | "queued" | "voice" | "render" | "finish" | "done" | "error" | "stopped";
 
 export type JobStatus = {
   stage: JobStage;
@@ -103,14 +117,18 @@ export type JobStatus = {
   done: number;
   total: number;
   error?: string;
+  /** The error is Canva not finishing its designs: "Continue with Canva" tries the missing ones again */
+  canvaRetry?: boolean;
   result?: {
     duration: number;
     questions: number;
+    /** Facts videos: the number of facts (questions holds the same number) */
+    facts?: number;
     width: number;
     height: number;
     render_seconds: number;
     /** Start of each part of the video (videos made before Nov 2026 don't have it) */
-    chapters?: { t: number; kind: "intro" | "q" | "ranks" | "outro"; q: number | null }[];
+    chapters?: { t: number; kind: "intro" | "q" | "fact" | "ranks" | "outro"; q: number | null }[];
     /** Attribution lines for Creative Commons music the video used (from sounds/CREDITS.json) */
     credits?: string[];
     /** Sound files used, by kind: music is "<mood>/<file>" under sounds/music */
@@ -160,11 +178,16 @@ function statusOf(dir: string, spec: JobSpec): JobStatus {
   if (fs.existsSync(path.join(dir, "stopped"))) return { stage: "stopped", percent: p?.percent ?? 0, message: "Stopped", elapsed: p?.elapsed ?? 0, done: 0, total: 0 };
   if (p?.stage === "error" || fs.existsSync(path.join(dir, "error.txt"))) {
     const err = fs.existsSync(path.join(dir, "error.txt")) ? fs.readFileSync(path.join(dir, "error.txt"), "utf8").split("\n\n")[0] : p?.message;
-    return { stage: "error", percent: p?.percent ?? 0, message: "Failed", elapsed: p?.elapsed ?? 0, done: 0, total: 0, error: err || "Unknown error" };
+    const canvaRetry = fs.existsSync(path.join(dir, "canva", "incomplete.json")) || undefined;
+    return { stage: "error", percent: p?.percent ?? 0, message: "Failed", elapsed: p?.elapsed ?? 0, done: 0, total: 0, error: err || "Unknown error", canvaRetry };
   }
   const base = p ?? { stage: "queued" as JobStage, percent: 0, message: "Starting…", elapsed: 0, done: 0, total: 0 };
+  // Canva's designs come first: no engine runs yet (the web app does this part and resumes it after a restart)
+  if (base.stage === "canva") return { ...base, elapsed: Math.max(0, (Date.now() - Date.parse(spec.createdAt)) / 1000) };
+  // Canva is done; the video waits for Rahul's own pictures (not "running": other videos can go)
+  if (base.stage === "pictures") return base;
   // The engine stopped without saying why (app restarted, laptop shut down…)
-  const started = Date.parse(spec.createdAt);
+  const started = Date.parse(spec.engineStartedAt ?? spec.createdAt);
   if (!alive(spec.pid) && Date.now() - started > 15_000) return { ...base, stage: "error", error: "The video maker stopped unexpectedly. Try again." };
   return base;
 }
@@ -193,7 +216,36 @@ export function listJobs(): JobView[] {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export const isRunning = (j: JobView) => ["queued", "voice", "render", "finish"].includes(j.status.stage);
+export const isRunning = (j: JobView) => ["canva", "queued", "voice", "render", "finish"].includes(j.status.stage);
+
+/** While Canva's designs are made first: the job's progress (shown on the video page and dashboard). */
+export function setCanvaProgress(id: string, made: number, total: number, message: string) {
+  const percent = total ? Math.round((made / total) * 100) : 0;
+  fs.writeFileSync(path.join(jobDir(id), "progress.json"), JSON.stringify({ stage: "canva", percent, message, elapsed: 0, done: made, total }), "utf8");
+}
+
+/** Canva's designs are in, and the video waits for Rahul to add his own pictures (video page). */
+export function setWaitingForPictures(id: string, open: number) {
+  const message = `Waiting for your pictures: ${open} to add, or make the video now with the shared ones`;
+  fs.writeFileSync(path.join(jobDir(id), "progress.json"), JSON.stringify({ stage: "pictures", percent: 0, message, elapsed: 0, done: 0, total: open }), "utf8");
+}
+
+/**
+ * Canva's designs are all in: start the video engine (it finds canva\status.json finished, so it
+ * doesn't wait). Returns false if the job is gone, stopped, or its engine already started.
+ */
+export function startEngine(id: string): boolean {
+  const dir = jobDir(id);
+  const full = readJson<JobSpec & Record<string, unknown>>(path.join(dir, "job.json"));
+  if (!full || fs.existsSync(path.join(dir, "stopped")) || (full.pid && alive(full.pid))) return false;
+  fs.rmSync(path.join(dir, "error.txt"), { force: true });
+  fs.writeFileSync(path.join(dir, "progress.json"), JSON.stringify({ stage: "queued", percent: 0, message: "Starting…", elapsed: 0, done: 0, total: 0 }), "utf8");
+  // The "stopped unexpectedly" check counts from when the engine started
+  full.engineStartedAt = new Date().toISOString();
+  full.pid = spawnEngine(full.kind === "facts" ? FACTS_ENGINE : ENGINE, dir);
+  fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify(full, null, 1), "utf8");
+  return true;
+}
 
 const csvCell = (v: string | number | null | undefined) => {
   const s = v == null ? "" : String(v);
@@ -244,14 +296,21 @@ export function createJob(input: {
   // YouTube title / description / tags from the CSV's settings lines (editable later)
   if (input.youtube && (input.youtube.title || input.youtube.description || input.youtube.tags?.length || input.youtube.category)) saveYoutubeMeta(id, input.youtube);
 
-  // Canva designs are made by the web app (canva-jobs.ts) while the engine records the narration;
-  // the engine waits for canva\status.json to say they're done before it draws the intro.
+  // Canva designs are made first by the web app (canva-jobs.ts: Canva allows about one every few
+  // minutes); it starts the engine (startEngine) once they're all in.
   if (input.settings.canva) {
     fs.mkdirSync(path.join(dir, "canva"), { recursive: true });
     fs.writeFileSync(path.join(dir, "canva", "status.json"), JSON.stringify({ state: "running", updatedAt: new Date().toISOString() }), "utf8");
-  }
+    setCanvaProgress(id, 0, 0, "Asking Canva for the designs…");
+  } else spec.pid = spawnEngine(ENGINE, dir);
+  fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify({ ...spec, ...engineSpec }, null, 1), "utf8");
+  return { ...spec, status: statusOf(dir, spec) };
+}
+
+/** Starts an engine script on a job folder (detached: it keeps going if the page is closed). Returns its pid. */
+function spawnEngine(script: string, dir: string) {
   const log = fs.openSync(path.join(dir, "engine.log"), "a");
-  const child = spawn(PYTHON, [ENGINE, dir], {
+  const child = spawn(PYTHON, [script, dir], {
     cwd: path.dirname(ENGINE),
     detached: true,
     windowsHide: true,
@@ -260,16 +319,92 @@ export function createJob(input: {
   });
   child.unref();
   fs.closeSync(log);
-  spec.pid = child.pid;
+  return child.pid;
+}
+
+/** A recording for a facts video: a file in the drafts folder, copied into the job as narration\<name>. */
+export type FactRecording = { from: string; name: string };
+
+/**
+ * A "Did you know?" facts video (facts_video.py). Each fact may carry the reader's recording;
+ * `middles` are the reader's own middle lines (record mode). The CSV, YouTube lines, Canva and
+ * thumbnails work as for quiz videos.
+ */
+export function createFactsJob(input: {
+  title: string;
+  format: VideoFormat;
+  facts: (FactItem & { recording?: FactRecording })[];
+  narration: "ai" | "record";
+  middles?: { before: number; recording: FactRecording }[];
+  /** The reader's own intro / ending (record mode; else the kid voice or the AI voice) */
+  intro?: FactRecording;
+  outro?: FactRecording;
+  settings: JobSettings;
+  userId: string;
+  fileName?: string;
+  sourceCsv?: string;
+  youtube?: Partial<YoutubeMeta>;
+}): JobView {
+  const id = `${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
+  const dir = jobDir(id);
+  fs.mkdirSync(dir, { recursive: true });
+  const copy = (r: FactRecording | undefined) => {
+    if (!r || !fs.existsSync(r.from)) return "";
+    fs.mkdirSync(path.join(dir, "narration"), { recursive: true });
+    fs.copyFileSync(r.from, path.join(dir, "narration", r.name));
+    return `narration/${r.name}`;
+  };
+  const lines = ["headline,detail,narration,seconds,image,audio"];
+  for (const f of input.facts) lines.push([f.headline, f.detail, f.narration, f.seconds, f.image, copy(f.recording)].map(csvCell).join(","));
+  fs.writeFileSync(path.join(dir, "facts.csv"), lines.join("\n") + "\n", "utf8");
+  const middles = (input.middles ?? []).map((m) => ({ before: m.before, file: copy(m.recording) })).filter((m) => m.file);
+  const introFile = copy(input.intro) || undefined;
+  const outroFile = copy(input.outro) || undefined;
+  if (input.sourceCsv) {
+    fs.writeFileSync(path.join(dir, "source.csv"), input.sourceCsv, "utf8");
+    keepCsv(input.fileName, input.sourceCsv);
+  }
+  const spec: JobSpec = {
+    id,
+    kind: "facts",
+    narration: input.narration,
+    title: input.title,
+    format: input.format,
+    questions: input.facts.length,
+    settings: input.settings,
+    createdAt: new Date().toISOString(),
+    createdBy: input.userId,
+    fileName: input.fileName,
+    exportName: exportName(input.title, input.format, new Date()),
+  };
+  const engineSpec = { format: input.format, settings: input.settings, middles, intro_file: introFile, outro_file: outroFile, models_dir: path.join(CHAOS_HOME, "models"), export_dir: VIDEO_FOLDER, export_name: spec.exportName };
+  fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify({ ...spec, ...engineSpec }, null, 1), "utf8");
+  if (input.youtube && (input.youtube.title || input.youtube.description || input.youtube.tags?.length || input.youtube.category)) saveYoutubeMeta(id, input.youtube);
+  // With Canva: its designs first, then the engine (see createJob)
+  if (input.settings.canva) {
+    fs.mkdirSync(path.join(dir, "canva"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "canva", "status.json"), JSON.stringify({ state: "running", updatedAt: new Date().toISOString() }), "utf8");
+    setCanvaProgress(id, 0, 0, "Asking Canva for the designs…");
+  } else spec.pid = spawnEngine(FACTS_ENGINE, dir);
   fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify({ ...spec, ...engineSpec }, null, 1), "utf8");
   return { ...spec, status: statusOf(dir, spec) };
 }
 
-/** Stops a running job (the engine and all its render workers). */
+/** A facts video's facts as the engine got them (facts.csv written by createFactsJob). */
+export function jobFacts(id: string): FactItem[] {
+  try {
+    return parseFactsCsv(fs.readFileSync(path.join(jobDir(id), "facts.csv"), "utf8")).facts;
+  } catch {
+    return [];
+  }
+}
+
+/** Stops a running job (the engine and all its render workers; Canva's work sees the "stopped" file). */
 export function stopJob(id: string) {
   const job = getJob(id);
   if (!job) return false;
   fs.writeFileSync(path.join(jobDir(id), "stopped"), new Date().toISOString());
+  fs.rmSync(path.join(jobDir(id), "canva", "incomplete.json"), { force: true });
   if (job.pid && alive(job.pid)) {
     if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(job.pid), "/T", "/F"], { windowsHide: true });
     else process.kill(-job.pid, "SIGKILL");
@@ -308,7 +443,8 @@ export function jobQuestions(id: string): QuizQuestion[] {
 
 /** Designs a new thumbnail (about a second). A new seed gives a different design. */
 export function designThumbnail(id: string, seed = Math.floor(Math.random() * 1_000_000)) {
-  const r = spawnSync(PYTHON, [THUMBNAILER, jobDir(id), String(seed)], {
+  const facts = getJob(id)?.kind === "facts";
+  const r = spawnSync(PYTHON, facts ? [FACTS_ENGINE, "thumbnail", jobDir(id), String(seed)] : [THUMBNAILER, jobDir(id), String(seed)], {
     cwd: path.dirname(THUMBNAILER),
     windowsHide: true,
     timeout: 60_000,
@@ -485,8 +621,22 @@ export function setCsvDiscarded(name: string, value: boolean) {
   return true;
 }
 
+/** A CSV from csv\ by its plain file name (never a path), for viewing it or making a video from it. */
+export function readLibraryCsv(name: string): { name: string; content: string; kind: "quiz" | "facts"; modifiedAt: string } | null {
+  const file = csvFile(name);
+  if (!file) return null;
+  try {
+    const content = fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "");
+    return { name, content, kind: detectCsvType(content) === "facts" ? "facts" : "quiz", modifiedAt: fs.statSync(file).mtime.toISOString() };
+  } catch {
+    return null;
+  }
+}
+
 export type CsvEntry = {
   name: string;
+  /** Quiz questions or Did-you-know facts */
+  kind: "quiz" | "facts";
   modifiedAt: string;
   videoName: string | null;
   questions: number;
@@ -512,12 +662,15 @@ export function listCsvLibrary(jobs: JobView[] = listJobs()): CsvEntry[] {
   const files = names.map((name) => {
     const file = path.join(CSV_FOLDER, name);
     const content = fs.readFileSync(file, "utf8");
-    const parsed = parseQuizCsv(content);
+    // Facts CSVs (Did-you-know videos) are counted by their facts
+    const facts = detectCsvType(content) === "facts" ? parseFactsCsv(content) : null;
+    const parsed = facts ? { settings: facts.settings, questions: facts.facts, issues: facts.issues } : parseQuizCsv(content);
     return {
       name,
       norm: normCsv(content),
       entry: {
         name,
+        kind: facts ? "facts" : "quiz",
         modifiedAt: fs.statSync(file).mtime.toISOString(),
         videoName: parsed.settings.videoName ?? null,
         questions: parsed.questions.length,

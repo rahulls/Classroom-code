@@ -5,7 +5,7 @@ import path from "node:path";
 import { UserError } from "@/core/action";
 import { decrypt, encrypt } from "@/core/crypto";
 import { DEFAULT_CATEGORY } from "./csv";
-import { CHAOS_HOME, getJob, getYoutubeMeta, imageCredit, jobDir, jobQuestions, musicCheck, setMark, thumbPath, videoPath, type JobView, type YoutubeMeta } from "./jobs";
+import { CHAOS_HOME, getJob, getYoutubeMeta, imageCredit, jobDir, jobFacts, jobQuestions, musicCheck, setMark, thumbPath, videoPath, type JobView, type YoutubeMeta } from "./jobs";
 
 // Publishing Chaos Creators videos to YouTube (YouTube Data API v3).
 // Rahul's own Google Cloud project supplies the OAuth client; he signs in on Google's page and
@@ -14,6 +14,14 @@ import { CHAOS_HOME, getJob, getYoutubeMeta, imageCredit, jobDir, jobQuestions, 
 // upload state lives next to it in jobs\<id>\youtube.json.
 
 const FILE = path.join(CHAOS_HOME, "youtube.json");
+/**
+ * Which channel: "chaos" (Chaos Creators, the original connection) or "edu" (the Edu videos
+ * channel). Both use the same Google OAuth client (kept in youtube.json); each channel keeps its
+ * own sign-in. The Edu channel's lives in youtube-edu.json.
+ */
+export type Channel = "chaos" | "edu";
+const fileFor = (ch: Channel) => (ch === "edu" ? path.join(CHAOS_HOME, "youtube-edu.json") : FILE);
+const where = (ch: Channel) => (ch === "edu" ? "Edu videos → Settings" : "Chaos Creators → YouTube");
 const P_SECRET = "chaos.youtube.clientSecret";
 const P_REFRESH = "chaos.youtube.refreshToken";
 export const YT_SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"];
@@ -30,18 +38,19 @@ type Stored = {
   problem?: string;
 };
 
-const readStored = (): Stored => {
+const readStored = (ch: Channel = "chaos"): Stored => {
   try {
-    return JSON.parse(fs.readFileSync(FILE, "utf8")) as Stored;
+    return JSON.parse(fs.readFileSync(fileFor(ch), "utf8")) as Stored;
   } catch {
     return {};
   }
 };
 
-function writeStored(s: Stored) {
+function writeStored(s: Stored, ch: Channel = "chaos") {
+  const f = fileFor(ch);
   fs.mkdirSync(CHAOS_HOME, { recursive: true });
-  fs.writeFileSync(FILE + ".tmp", JSON.stringify(s, null, 1), "utf8");
-  fs.renameSync(FILE + ".tmp", FILE);
+  fs.writeFileSync(f + ".tmp", JSON.stringify(s, null, 1), "utf8");
+  fs.renameSync(f + ".tmp", f);
 }
 
 export type YoutubeConnection = {
@@ -54,11 +63,12 @@ export type YoutubeConnection = {
   problem: string | null;
 };
 
-export function youtubeConnection(): YoutubeConnection {
-  const s = readStored();
+export function youtubeConnection(ch: Channel = "chaos"): YoutubeConnection {
+  const c = readStored();
+  const s = readStored(ch);
   return {
-    clientId: s.clientId ?? null,
-    hasSecret: !!s.clientSecret,
+    clientId: c.clientId ?? null,
+    hasSecret: !!c.clientSecret,
     connected: !!s.refreshToken,
     channelId: s.channelId ?? null,
     channelTitle: s.channelTitle ?? null,
@@ -118,7 +128,7 @@ async function tokenRequest(params: Record<string, string>): Promise<TokenRespon
 }
 
 /** Google redirected back with a code: swap it for tokens and find the channel. */
-export async function finishConnect(code: string, redirectUri: string) {
+export async function finishConnect(code: string, redirectUri: string, chan: Channel = "chaos") {
   const c = client();
   const t = await tokenRequest({ code, client_id: c.id, client_secret: c.secret, redirect_uri: redirectUri, grant_type: "authorization_code" });
   if (!t.access_token) throw new UserError(`Google refused the sign-in: ${t.error_description || t.error || "unknown error"}`);
@@ -127,42 +137,50 @@ export async function finishConnect(code: string, redirectUri: string) {
   const body = (await ch.json().catch(() => ({}))) as { items?: { id: string; snippet?: { title?: string } }[]; error?: { message?: string } };
   if (!ch.ok) throw new UserError(`Couldn't read your channel: ${body.error?.message ?? ch.status}`);
   const item = body.items?.[0];
-  if (!item) throw new UserError("That Google account has no YouTube channel. Connect again and choose the account (or brand account) that owns Chaos Creators.");
+  if (!item) throw new UserError(`That Google account has no YouTube channel. Connect again and choose the account (or brand account) that owns ${chan === "edu" ? "the Edu videos channel" : "Chaos Creators"}.`);
+  const other = readStored(chan === "edu" ? "chaos" : "edu");
+  if (other.refreshToken && other.channelId === item.id)
+    throw new UserError(
+      chan === "edu"
+        ? `That is the Chaos Creators channel (${item.snippet?.title ?? item.id}). Connect again and pick the new Edu videos channel on Google's account list.`
+        : `That channel (${item.snippet?.title ?? item.id}) is connected to Edu videos. Connect again and pick Chaos Creators.`,
+    );
   writeStored({
-    ...readStored(),
+    ...readStored(chan),
     refreshToken: encrypt(t.refresh_token, P_REFRESH),
     channelId: item.id,
     channelTitle: item.snippet?.title ?? "your channel",
     connectedAt: new Date().toISOString(),
     problem: undefined,
-  });
-  cachedToken = null;
+  }, chan);
+  cachedToken.delete(chan);
   return item.snippet?.title ?? "your channel";
 }
 
-let cachedToken: { token: string; until: number } | null = null;
+const cachedToken = new Map<Channel, { token: string; until: number }>();
 
-async function accessToken() {
-  if (cachedToken && cachedToken.until > Date.now()) return cachedToken.token;
-  const s = readStored();
-  if (!s.refreshToken) throw new UserError("YouTube isn't connected. Connect it on the YouTube page first.");
+async function accessToken(ch: Channel = "chaos") {
+  const hit = cachedToken.get(ch);
+  if (hit && hit.until > Date.now()) return hit.token;
+  const s = readStored(ch);
+  if (!s.refreshToken) throw new UserError(`YouTube isn't connected. Connect it first (${where(ch)}).`);
   const c = client();
   const t = await tokenRequest({ refresh_token: decrypt(s.refreshToken, P_REFRESH), client_id: c.id, client_secret: c.secret, grant_type: "refresh_token" });
   if (!t.access_token) {
     if (t.error === "invalid_grant") {
       // Revoked, password changed, or the 7-day limit of a "Testing" OAuth app
-      writeStored({ ...readStored(), refreshToken: undefined, problem: "YouTube's permission expired or was removed. Connect again." });
-      throw new UserError("YouTube's permission expired or was removed. Connect YouTube again (Chaos Creators → YouTube).");
+      writeStored({ ...readStored(ch), refreshToken: undefined, problem: "YouTube's permission expired or was removed. Connect again." }, ch);
+      throw new UserError(`YouTube's permission expired or was removed. Connect YouTube again (${where(ch)}).`);
     }
     if (t.error === "invalid_client" || t.error === "unauthorized_client") throw new UserError("Google rejected the client ID or secret. Check them on the YouTube page.");
     throw new UserError(`Google sign-in failed (${t.error ?? "no answer"}). Try again in a minute.`);
   }
-  cachedToken = { token: t.access_token, until: Date.now() + ((t.expires_in ?? 3600) - 120) * 1000 };
+  cachedToken.set(ch, { token: t.access_token, until: Date.now() + ((t.expires_in ?? 3600) - 120) * 1000 });
   return t.access_token;
 }
 
-export async function disconnect() {
-  const s = readStored();
+export async function disconnect(ch: Channel = "chaos") {
+  const s = readStored(ch);
   if (s.refreshToken) {
     await fetch("https://oauth2.googleapis.com/revoke", {
       method: "POST",
@@ -170,8 +188,8 @@ export async function disconnect() {
       body: new URLSearchParams({ token: decrypt(s.refreshToken, P_REFRESH) }),
     }).catch(() => undefined);
   }
-  writeStored({ clientId: s.clientId, clientSecret: s.clientSecret });
-  cachedToken = null;
+  writeStored(ch === "edu" ? {} : { clientId: s.clientId, clientSecret: s.clientSecret }, ch);
+  cachedToken.delete(ch);
 }
 
 /** Turns a Google API error into something Rahul can act on. */
@@ -349,6 +367,95 @@ async function runUpload(id: string, meta: UploadMeta, state: UploadState) {
   }
 }
 
+/** Sets a JPG/PNG file as an uploaded video's custom thumbnail (YouTube: at most 2 MB; needs a verified channel). */
+export async function setThumbnailFile(videoId: string, file: string, ch: Channel = "chaos") {
+  const body = fs.readFileSync(file);
+  if (body.length > 2 * 1024 * 1024) throw new UserError("The thumbnail is over YouTube's 2 MB limit.");
+  const r = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}&uploadType=media`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await accessToken(ch)}`, "Content-Type": /\.png$/i.test(file) ? "image/png" : "image/jpeg" },
+    body,
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    console.error(`[youtube thumbnail] ${videoId}: ${r.status} ${text.slice(0, 600)}`);
+    throw new UserError(await apiError({ status: r.status, text }, "thumbnail"));
+  }
+}
+
+/**
+ * Uploads any MP4 (and optional JPG thumbnail) to a connected channel. Used by the Edu videos
+ * module (src/modules/edu), which publishes to its own channel ("edu"). `save` receives the state as it
+ * changes (with a heartbeat every few seconds). Resolves with the final state; never throws.
+ */
+export async function uploadVideoFile(file: string, thumb: string | null, meta: UploadMeta, save: (s: UploadState) => void, ch: Channel = "chaos"): Promise<UploadState> {
+  const conn = youtubeConnection(ch);
+  const state: UploadState = {
+    state: "uploading",
+    sent: 0,
+    total: fs.statSync(file).size,
+    startedAt: new Date().toISOString(),
+    updatedAt: Date.now(),
+    title: meta.title,
+    privacy: meta.privacy,
+    channelTitle: conn.channelTitle ?? undefined,
+  };
+  save(state);
+  const beat = setInterval(() => {
+    state.updatedAt = Date.now();
+    save(state);
+  }, 3000);
+  try {
+    const token = await accessToken(ch);
+    const init = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Length": String(state.total),
+        "X-Upload-Content-Type": "video/mp4",
+      },
+      body: JSON.stringify({
+        snippet: {
+          title: clean(meta.title),
+          description: clean(meta.description),
+          tags: meta.tags,
+          categoryId: meta.categoryId || DEFAULT_CATEGORY,
+          defaultLanguage: "en",
+          defaultAudioLanguage: "en",
+        },
+        status: { privacyStatus: meta.privacy, selfDeclaredMadeForKids: meta.madeForKids, embeddable: true, license: "youtube" },
+      }),
+    });
+    if (!init.ok) throw new UserError(await apiError(init, "video"));
+    const location = init.headers.get("location");
+    if (!location) throw new Error("YouTube gave no upload address");
+    const video = await sendResumable(location, file, state, () => accessToken(ch));
+    state.videoId = video.id;
+    state.sent = state.total;
+    if (meta.useThumbnail && thumb && fs.existsSync(thumb)) {
+      try {
+        await setThumbnailFile(video.id, thumb, ch);
+        state.thumbnail = "set";
+      } catch (e) {
+        state.thumbnail = "failed";
+        state.thumbnailError = e instanceof UserError ? e.message : String(e);
+      }
+    } else state.thumbnail = "skipped";
+    state.state = "done";
+    state.finishedAt = new Date().toISOString();
+  } catch (e) {
+    state.state = "error";
+    state.error = e instanceof UserError ? e.message : `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
+    console.error("[youtube upload]", e);
+  } finally {
+    clearInterval(beat);
+    state.updatedAt = Date.now();
+    save(state);
+  }
+  return state;
+}
+
 type HttpResult = { status: number; text: string; headers: Record<string, string | string[] | undefined> };
 
 function put(url: string, headers: Record<string, string>, body?: fs.ReadStream, onData?: (n: number) => void): Promise<HttpResult> {
@@ -434,6 +541,7 @@ function chapterLines(job: JobView, labels: "full" | "short"): string[] | null {
   const ch = job.status.result?.chapters;
   const end = job.status.result?.duration;
   if (job.format !== "youtube" || !ch?.length || !end) return null;
+  if (job.kind === "facts") return factChapterLines(job, ch, end, labels);
   const qs = jobQuestions(job.id);
   const parts = ch.map((c, i) => ({ ...c, len: (ch[i + 1]?.t ?? end) - c.t }));
   const out: { t: number; label: string }[] = [];
@@ -452,7 +560,61 @@ function chapterLines(job: JobView, labels: "full" | "short"): string[] | null {
   return out.map((c) => `${stamp(c.t)} ${clean(c.label)}`);
 }
 
+/** Facts are 5-10 s each, so a chapter holds a fact and the ones after it until it lasts 10 s. */
+function factChapterLines(job: JobView, ch: NonNullable<NonNullable<JobView["status"]["result"]>["chapters"]>, end: number, labels: "full" | "short"): string[] | null {
+  const facts = jobFacts(job.id);
+  const parts = ch.filter((c) => c.kind === "fact" && c.q != null);
+  const outroAt = ch.find((c) => c.kind === "outro")?.t ?? end;
+  const out: { t: number; label: string }[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const first = parts[i]!;
+    let j = i;
+    while (j + 1 < parts.length && parts[j + 1]!.t - first.t < 10) j++;
+    const until = parts[j + 1]?.t ?? outroAt;
+    if (until - first.t < 10 && out.length) break; // the last few join the chapter before
+    const n0 = first.q! + 1;
+    const n1 = parts[j]!.q! + 1;
+    const text = facts[first.q!]?.headline ?? "";
+    const label = labels === "full" && text ? `${n0 === n1 ? `Fact ${n0}` : `Facts ${n0}–${n1}`}: ${text.length > 55 ? `${text.slice(0, 52).trimEnd()}…` : text}` : n0 === n1 ? `Fact ${n0}` : `Facts ${n0}–${n1}`;
+    out.push({ t: out.length ? first.t : 0, label: out.length ? label : `Intro + ${label}` });
+    i = j + 1;
+  }
+  if (end - outroAt >= 10) out.push({ t: outroAt, label: "Thanks for watching" });
+  for (let k = 0; k < out.length - 1; k++) if (out[k + 1]!.t - out[k]!.t < 10) return null;
+  if (out.length < 3) return null;
+  return out.map((c) => `${stamp(c.t)} ${clean(c.label)}`);
+}
+
+/** Title / description / tags for a facts video when its CSV didn't give any. */
+function suggestedFactsMeta(job: JobView): Omit<UploadMeta, "privacy" | "madeForKids" | "useThumbnail"> {
+  const badge = titleCase(job.settings.quiz_badge || "Amazing Facts");
+  const topic = /fact/i.test(badge) ? badge : `${badge} Facts`;
+  const n = job.questions;
+  const shorts = job.format === "shorts";
+  let title = `${topic} You Didn't Know | ${n} Mind-Blowing Facts`;
+  if (shorts) title += " #shorts";
+  if (title.length > 100) title = `${topic}${shorts ? " #shorts" : ""}`.slice(0, 100);
+  const intro = [`${topic}: ${n} amazing facts you probably never heard before!`, "Which fact surprised you the most? Comment below 👇"];
+  const outro = [
+    shorts ? "Subscribe to Chaos Creators for more amazing facts!" : "Thanks for watching! Like the video and subscribe to Chaos Creators for more amazing facts!",
+    "",
+    `#didyouknow #facts #amazingfacts #funfacts${shorts ? " #shorts" : ""}`,
+  ];
+  const credits = job.status.result?.credits ?? [];
+  const music = credits.length ? ["", "Music:", ...credits] : [];
+  let description = "";
+  for (const labels of ["full", "short"] as const) {
+    const ch = chapterLines(job, labels);
+    description = [...intro, "", ...(ch ? ["Facts:", ...ch, ""] : []), ...outro, ...music].join("\n");
+    if (description.length <= 4900) break;
+  }
+  if (description.length > 4900) description = [...intro, "", ...outro, ...music].join("\n");
+  return { title: clean(title), description: clean(description), tags: ["did you know", "facts", "amazing facts", "fun facts", "facts you didn't know", "chaos creators"] };
+}
+
 export function suggestedMeta(job: JobView): Omit<UploadMeta, "privacy" | "madeForKids" | "useThumbnail"> {
+  if (job.kind === "facts") return suggestedFactsMeta(job);
   const badge = titleCase(job.settings.quiz_badge || "GK Quiz");
   const n = job.questions;
   const secs = job.settings.timer_seconds ?? 5;

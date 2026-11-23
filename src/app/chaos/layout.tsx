@@ -31,6 +31,9 @@ export default async function ChaosLayout({ children }: { children: React.ReactN
             <Link href="/chaos/canva" className="rounded px-3 py-1.5 hover:bg-white/10">
               Canva
             </Link>
+            <Link href="/chaos/usage" className="rounded px-3 py-1.5 hover:bg-white/10">
+              Usage
+            </Link>
             <Link href="/today" className="rounded border border-white/30 px-3 py-1.5 hover:bg-white/10">
               ← RSC Classroom
             </Link>

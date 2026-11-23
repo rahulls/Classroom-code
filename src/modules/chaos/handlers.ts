@@ -11,6 +11,7 @@ import {
   FORMATS,
   GENERATE_COUNTS,
   IMAGE_NAME_RE,
+  KID_VOICE_PACK,
   MAX_CSV_BYTES,
   MUSIC_MOODS,
   VOICES,
@@ -22,10 +23,29 @@ import {
   parseRanks,
   parseTags,
 } from "./csv";
-import { generateQuizCsv, saveClaudeKey } from "./generate";
-import { canvaThumbnail, canvaForJob } from "./canva-jobs";
-import { canvaConnection, disconnectCanva } from "./canva";
+import { generateFactsCsv, generateQuizCsv, saveClaudeKey } from "./generate";
+import { GENERATE_FACT_COUNTS, parseFactsCsv } from "./facts";
 import {
+  CARD_KEY_RE,
+  MAX_RECORDING_BYTES,
+  RECORDING_EXT,
+  addDraftVideo,
+  createDraft,
+  deleteDraft,
+  draftReadiness,
+  draftRecordings,
+  draftSourceCsv,
+  editCard,
+  getDraft,
+  removeRecording,
+  saveRecording,
+  setIntroOutro,
+} from "./facts-drafts";
+import { MAX_PICTURE_BYTES, canvaThumbnail, canvaForJob, canvaThumbnailForJob, continueCanva, releasePictures, saveYourPicture } from "./canva-jobs";
+import { canvaConnection, disconnectCanva } from "./canva";
+import { emailReport, istDay, saveUsageSettings } from "./usage";
+import {
+  createFactsJob,
   createJob,
   deleteJob,
   designThumbnail,
@@ -42,6 +62,7 @@ import {
   setMark,
   setThumbImage,
   stopJob,
+  type JobSettings,
 } from "./jobs";
 import { disconnect, pushThumbnail, saveClient, startUpload } from "./youtube";
 
@@ -49,6 +70,7 @@ import { disconnect, pushThumbnail, saveClient, startUpload } from "./youtube";
 const PERMISSION = "settings.manage" as const;
 
 const text = (max: number) => z.string().trim().max(max).optional();
+const checkbox = z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean());
 
 export const createVideoAction = defineAction({
   permission: PERMISSION,
@@ -67,6 +89,7 @@ export const createVideoAction = defineAction({
     musicMood: z.enum(MUSIC_MOODS.map((m) => m.value) as [string, ...string[]]).optional(),
     ranks: text(200),
     ranksOn: z.string().optional(),
+    kidVoice: z.string().optional(),
     canva: z.string().optional(),
     canvaQuestions: z.string().optional(),
   }),
@@ -100,15 +123,211 @@ export const createVideoAction = defineAction({
         timer_seconds: input.timerSeconds,
         voice: input.voice,
         music_mood: input.musicMood,
+        voice_pack: input.kidVoice ? KID_VOICE_PACK : "off",
         canva: input.canva ? true : undefined,
         canva_questions: input.canva && input.canvaQuestions ? true : undefined,
         ranks: input.format !== "youtube" ? undefined : !input.ranksOn ? ["off"] : parseRanks(input.ranks ?? "").length >= 2 ? parseRanks(input.ranks ?? "") : undefined,
       },
     });
-    if (job.settings.canva) void canvaForJob(job.id); // runs on while the engine records the narration
+    // Runs on while the engine records the narration. The Canva thumbnail is made for every video.
+    if (job.settings.canva) void canvaForJob(job.id);
+    else void canvaThumbnailForJob(job.id);
     await audit({ action: "chaos.video.created", actor: user, entity: "chaos_video", entityId: job.id, after: { format: job.format, questions: job.questions } });
     revalidatePath("/chaos");
     redirect(`/chaos/videos/${job.id}`);
+  },
+});
+
+// ------------------------- facts videos ("Did you know?") -------------------------
+
+const draftId = z.string().regex(/^[a-z0-9]{6,40}$/);
+const cardKey = z.string().regex(CARD_KEY_RE);
+
+/**
+ * Facts video from the studio's Facts tab. AI narration: the video is made straight away.
+ * Recorded narration: a recording deck (draft) is made first; its "Make video" makes the video.
+ */
+export const createFactsVideoAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    csv: z.string().min(1, "Upload a facts CSV first").max(MAX_CSV_BYTES, "The CSV is too big"),
+    fileName: text(200),
+    format: z.enum(Object.keys(FORMATS) as [keyof typeof FORMATS, ...(keyof typeof FORMATS)[]]),
+    count: z.coerce.number().int().min(0).max(1000).optional(),
+    narration: z.enum(["ai", "record"]),
+    title: text(80),
+    quizBadge: text(24),
+    introBadge: text(30),
+    titleLine1: text(24),
+    titleLine2: text(24),
+    voice: z.enum(VOICES.map((v) => v.value) as [string, ...string[]]),
+    musicMood: z.enum(MUSIC_MOODS.map((m) => m.value) as [string, ...string[]]).optional(),
+    kidVoice: z.string().optional(),
+    canva: z.string().optional(),
+    canvaFacts: z.string().optional(),
+    introOutro: z.string().optional(),
+  }),
+  run: async (input, { user }) => {
+    const parsed = parseFactsCsv(input.csv);
+    const errors = parsed.issues.filter((i) => i.level === "error");
+    if (errors.length) return { ok: false, error: `Fix the CSV first: ${errors.slice(0, 3).map((e) => (e.row ? `row ${e.row}: ${e.message}` : e.message)).join(" · ")}` };
+    let facts = parsed.facts;
+    if (input.count) {
+      if (facts.length < input.count) return { ok: false, error: `The CSV has ${facts.length} facts; ${input.count} were asked for.` };
+      facts = facts.slice(0, input.count);
+    }
+    if (input.canva && !canvaConnection().connected) return { ok: false, error: "Connect Canva first (Chaos Creators → Canva), or untick Canva designs." };
+    const titleLines = [input.titleLine1, input.titleLine2].filter((s): s is string => !!s);
+    const title = input.title || input.fileName?.replace(/\.csv$/i, "") || "Facts video";
+    const settings: JobSettings = {
+      thumb_image: parsed.settings.thumbnailImage && listImages().some((i) => i.name === parsed.settings.thumbnailImage) ? parsed.settings.thumbnailImage : undefined,
+      quiz_badge: input.quizBadge?.toUpperCase(),
+      intro_badge: input.introBadge?.toUpperCase(),
+      title_lines: titleLines.length ? titleLines : undefined,
+      voice: input.voice,
+      music_mood: input.musicMood,
+      voice_pack: input.kidVoice ? KID_VOICE_PACK : "off",
+      canva: input.canva ? true : undefined,
+      canva_questions: input.canva && input.canvaFacts ? true : undefined,
+    };
+    const youtube = { title: parsed.settings.youtubeTitle, description: parsed.settings.youtubeDescription, tags: parsed.settings.youtubeTags, category: parsed.settings.youtubeCategory };
+    if (input.narration === "record") {
+      const draft = createDraft({ title, format: input.format, facts, settings, userId: user.id, fileName: input.fileName, sourceCsv: input.csv, youtube, introOutro: !!input.introOutro });
+      await audit({ action: "chaos.facts.deck_created", actor: user, entity: "chaos_facts_deck", entityId: draft.id, after: { format: draft.format, facts: facts.length } });
+      revalidatePath("/chaos");
+      redirect(`/chaos/facts/${draft.id}`);
+    }
+    const ready = engineReady();
+    if (!ready.ok) return { ok: false, error: ready.problem! };
+    if (listJobs().some(isRunning)) return { ok: false, error: "Another video is being made. Wait for it to finish (or stop it) first: one at a time keeps the laptop usable." };
+    const job = createFactsJob({ title, format: input.format, facts, narration: "ai", settings, userId: user.id, fileName: input.fileName, sourceCsv: input.csv, youtube });
+    if (job.settings.canva) void canvaForJob(job.id);
+    else void canvaThumbnailForJob(job.id);
+    await audit({ action: "chaos.video.created", actor: user, entity: "chaos_video", entityId: job.id, after: { kind: "facts", format: job.format, facts: job.questions } });
+    revalidatePath("/chaos");
+    redirect(`/chaos/videos/${job.id}`);
+  },
+});
+
+/** One recording from the deck (replaces the card's earlier one). */
+export const saveRecordingAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    id: draftId,
+    key: cardKey,
+    seconds: z.coerce.number().min(0.2, "That recording is empty").max(120, "Keep a recording under 2 minutes"),
+    file: z
+      .instanceof(File, { message: "No recording came through. Try again." })
+      .refine((f) => f.size > 0 && f.size <= MAX_RECORDING_BYTES, "The recording is too big"),
+  }),
+  run: async ({ id, key, seconds, file }) => {
+    const mime = (file.type || "audio/webm").split(";")[0]!.trim() as keyof typeof RECORDING_EXT;
+    const ext = RECORDING_EXT[mime];
+    if (!ext) return { ok: false, error: `This browser records ${file.type}, which the studio can't use. Use Chrome or Edge.` };
+    const rec = saveRecording(id, key, Buffer.from(await file.arrayBuffer()), ext, seconds);
+    if (!rec) return { ok: false, error: "That card isn't in this deck any more. Reload the page." };
+    return { ok: true, data: { recording: rec } };
+  },
+});
+
+/** The deck's "Record the intro and ending too" switch. */
+export const setIntroOutroAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ id: draftId, on: z.enum(["0", "1"]) }),
+  run: async ({ id, on }) => {
+    const cards = setIntroOutro(id, on === "1");
+    if (!cards) return { ok: false, error: "This recording deck was deleted." };
+    revalidatePath(`/chaos/facts/${id}`);
+    return { ok: true, data: cards };
+  },
+});
+
+export const deleteRecordingAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ id: draftId, key: cardKey }),
+  run: async ({ id, key }) => {
+    removeRecording(id, key);
+    return { ok: true };
+  },
+});
+
+/** Changes a card's words: a fact's headline / detail / narration, or a middle line. */
+export const editCardAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    id: draftId,
+    key: cardKey,
+    headline: z.string().trim().min(1, "The headline can't be empty").max(160).optional(),
+    detail: z.string().trim().max(240).optional(),
+    narration: z.string().trim().max(400).optional(),
+    text: z.string().trim().min(1, "Type the line to say").max(160).optional(),
+  }),
+  run: async ({ id, key, ...patch }) => {
+    if (!editCard(id, key, patch)) return { ok: false, error: "That card isn't in this deck any more. Reload the page." };
+    revalidatePath(`/chaos/facts/${id}`);
+    return { ok: true };
+  },
+});
+
+/** "Make video" on a recording deck: every fact must be recorded (middle lines are optional). */
+export const makeFactsVideoAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ id: draftId }),
+  run: async ({ id }, { user }) => {
+    const draft = getDraft(id);
+    if (!draft) return { ok: false, error: "This recording deck was deleted." };
+    const { ready, missing } = draftReadiness(draft);
+    if (!ready) return { ok: false, error: `Record every fact first: ${missing.length} still to record (or recorded before their words changed).` };
+    const engine = engineReady();
+    if (!engine.ok) return { ok: false, error: engine.problem! };
+    if (listJobs().some(isRunning)) return { ok: false, error: "Another video is being made. Wait for it to finish (or stop it) first." };
+    if (draft.settings.canva && !canvaConnection().connected) return { ok: false, error: "Canva designs are on for this deck, but Canva isn't connected. Connect Canva first." };
+    const rec = draftRecordings(draft);
+    const job = createFactsJob({
+      title: draft.title,
+      format: draft.format,
+      facts: rec.facts,
+      middles: rec.middles,
+      intro: rec.intro,
+      outro: rec.outro,
+      narration: "record",
+      settings: draft.settings,
+      userId: user.id,
+      fileName: draft.fileName,
+      sourceCsv: draftSourceCsv(id),
+      youtube: draft.youtube,
+    });
+    addDraftVideo(id, job.id);
+    if (job.settings.canva) void canvaForJob(job.id);
+    else void canvaThumbnailForJob(job.id);
+    await audit({ action: "chaos.video.created", actor: user, entity: "chaos_video", entityId: job.id, after: { kind: "facts", narration: "record", deck: id, facts: job.questions } });
+    revalidatePath("/chaos");
+    redirect(`/chaos/videos/${job.id}`);
+  },
+});
+
+export const deleteDraftAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ id: draftId, back: z.string().optional() }),
+  run: async ({ id, back }, { user }) => {
+    if (!deleteDraft(id)) return { ok: false, error: "Deck not found." };
+    await audit({ action: "chaos.facts.deck_deleted", actor: user, entity: "chaos_facts_deck", entityId: id });
+    revalidatePath("/chaos");
+    if (back) redirect("/chaos?type=facts");
+    return { ok: true, message: "Deleted." };
+  },
+});
+
+export const generateFactsAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    topic: z.string().trim().min(3, "Type a topic").max(200, "Keep the topic under 200 characters"),
+    count: z.coerce.number().int().refine((n) => (GENERATE_FACT_COUNTS as readonly number[]).includes(n), "Choose a number of facts"),
+  }),
+  run: async (input, { user }) => {
+    const res = await generateFactsCsv(input);
+    await audit({ action: "chaos.facts.generated", actor: user, entity: "chaos_facts", entityId: "claude", after: { topic: input.topic, count: input.count, made: res.facts } });
+    return { ok: true, message: `${res.facts} facts written.`, data: res };
   },
 });
 
@@ -153,6 +372,54 @@ export const stopVideoAction = defineAction({
   },
 });
 
+/** A video whose Canva designs didn't all come: ask Canva for the missing ones again (then the video is made). */
+export const continueCanvaAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ id: z.string().regex(/^[a-z0-9]{6,40}$/) }),
+  run: async ({ id }) => {
+    if (listJobs().some((j) => j.id !== id && isRunning(j))) return { ok: false, error: "Another video is being made. Wait for it to finish (or stop it) first." };
+    if (!continueCanva(id)) return { ok: false, error: "This video isn't waiting for Canva." };
+    revalidatePath("/chaos");
+    return { ok: true, message: "Asking Canva again." };
+  },
+});
+
+/** Rahul's own picture for a fact / question without its own Canva picture (from its prompt). */
+export const uploadYourPictureAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    id: z.string().regex(/^[a-z0-9]{6,40}$/),
+    name: z.string().regex(/^q\d{1,3}$/),
+    file: z
+      .instanceof(File, { message: "Choose a picture" })
+      .refine((f) => f.size > 0, "Choose a picture")
+      .refine((f) => f.size <= MAX_PICTURE_BYTES, "The picture must be under 10 MB")
+      .refine((f) => /\.(jpe?g|png|webp)$/i.test(f.name), "Use a .jpg, .png or .webp picture"),
+  }),
+  run: async ({ id, name, file }) => {
+    const job = getJob(id);
+    if (!job || !["canva", "pictures"].includes(job.status.stage)) return { ok: false, error: "The video is already being made, so its pictures can't change now." };
+    const open = saveYourPicture(id, name, Buffer.from(await file.arrayBuffer()));
+    // The last one in while the video waits: make it straight away
+    if (!open && job.status.stage === "pictures") releasePictures(id);
+    revalidatePath(`/chaos/videos/${id}`);
+    return { ok: true, message: open ? `Picture added. ${open} still to add (or make the video now).` : "Picture added." };
+  },
+});
+
+/** The video waits for Rahul's pictures: make it now, with the shared pictures for the rest. */
+export const makeVideoNowAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ id: z.string().regex(/^[a-z0-9]{6,40}$/) }),
+  run: async ({ id }) => {
+    if (listJobs().some((j) => j.id !== id && isRunning(j))) return { ok: false, error: "Another video is being made. Wait for it to finish (or stop it) first." };
+    if (!releasePictures(id)) return { ok: false, error: "This video isn't waiting for pictures." };
+    revalidatePath(`/chaos/videos/${id}`);
+    revalidatePath("/chaos");
+    return { ok: true, message: "Making the video." };
+  },
+});
+
 export const deleteVideoAction = defineAction({
   permission: PERMISSION,
   schema: z.object({ id: z.string().regex(/^[a-z0-9]{6,40}$/), back: z.string().optional() }),
@@ -192,6 +459,32 @@ export const discardCsvAction = defineAction({
 // ------------------------------ thumbnails ------------------------------
 
 const jobId = z.string().regex(/^[a-z0-9]{6,40}$/);
+
+export const saveUsageSettingsAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    canvaDailyLimit: z.coerce.number().int("A whole number").min(0).max(2000),
+    canvaSavingPercent: z.coerce.number().int("A whole number").min(0, "0 to 60").max(60, "0 to 60"),
+    emailReport: checkbox,
+    canvaRupeesPerAction: z.coerce.number().min(0).max(100),
+    rupeesPerDollar: z.coerce.number().min(1).max(500),
+  }),
+  run: async (input, { user }) => {
+    saveUsageSettings(input);
+    await audit({ action: "chaos.usage.settings_saved", actor: user, entity: "chaos_usage", entityId: "settings", after: input });
+    revalidatePath("/chaos/usage");
+    return { ok: true, message: "Saved." };
+  },
+});
+
+export const emailUsageReportAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
+  run: async ({ day }) => {
+    const to = await emailReport(day ?? istDay());
+    return { ok: true, message: `Report emailed to ${to}.` };
+  },
+});
 
 export const disconnectCanvaAction = defineAction({
   permission: PERMISSION,

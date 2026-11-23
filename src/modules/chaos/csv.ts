@@ -11,6 +11,7 @@
 //   Intro title line 2,Quiz
 //   Seconds per question,10
 //   Music mood,upbeat        (upbeat, epic, suspense, random or off)
+//   Kid voice,on             (kid recordings for intro, middle lines and ending; off = AI narrator only)
 //   Ranks,Beginner,Learner,Smart,Expert,Genius   (2-6 rank titles, lowest score first; long videos)
 
 export const CSV_COLUMNS = ["question", "option_a", "option_b", "option_c", "option_d", "answer", "fact", "seconds"] as const;
@@ -50,6 +51,12 @@ export type QuizSettings = {
   youtubeCategory?: string;
   /** Topic photo for the thumbnail: a file in src\Chaos creators\images */
   thumbnailImage?: string;
+  /** Kid voice recordings (intro, middle lines, ending) instead of the AI narrator: on by default */
+  kidVoice?: boolean;
+  /** "Video type,facts" marks a Did-you-know facts CSV (facts.ts); quiz is the default */
+  videoType?: "quiz" | "facts";
+  /** Facts videos: who reads the facts, the AI voice or a person recorded in the studio */
+  narration?: "ai" | "record";
 };
 
 /** YouTube's video categories (the ones open to uploads). */
@@ -153,14 +160,15 @@ export const GENERATE_COUNTS = [5, 10, 15, 25, 50, 100, 150] as const;
 
 export type ParsedQuiz = { questions: QuizQuestion[]; issues: CsvIssue[]; missingColumns: string[]; settings: QuizSettings };
 
-type TextSetting = Exclude<keyof QuizSettings, "seconds" | "musicMood" | "ranks" | "youtubeDescription" | "youtubeTags" | "youtubeCategory" | "thumbnailImage">;
+type TextSetting = Exclude<keyof QuizSettings, "seconds" | "musicMood" | "ranks" | "youtubeDescription" | "youtubeTags" | "youtubeCategory" | "thumbnailImage" | "kidVoice" | "videoType" | "narration">;
 
 /** Setting names (lower case, letters and digits only) → field, with its length limit. */
-const SETTING_KEYS: Record<string, { key: TextSetting; max: number } | { key: "seconds" } | { key: "musicMood" } | { key: "ranks" } | { key: "youtubeDescription" } | { key: "youtubeTags" } | { key: "youtubeCategory" } | { key: "thumbnailImage" }> = {
+const SETTING_KEYS: Record<string, { key: TextSetting; max: number } | { key: "seconds" } | { key: "musicMood" } | { key: "ranks" } | { key: "youtubeDescription" } | { key: "youtubeTags" } | { key: "youtubeCategory" } | { key: "thumbnailImage" } | { key: "kidVoice" } | { key: "videoType" } | { key: "narration" }> = {
   videoname: { key: "videoName", max: 80 },
   title: { key: "videoName", max: 80 },
   badgeoneveryquestion: { key: "badge", max: 24 },
   badge: { key: "badge", max: 24 },
+  badgeoneveryfact: { key: "badge", max: 24 },
   quizbadge: { key: "badge", max: 24 },
   introtag: { key: "introTag", max: 30 },
   introbadge: { key: "introTag", max: 30 },
@@ -172,6 +180,7 @@ const SETTING_KEYS: Record<string, { key: TextSetting; max: number } | { key: "s
   titleline2: { key: "titleLine2", max: 24 },
   secondsperquestion: { key: "seconds" },
   timerseconds: { key: "seconds" },
+  secondsperfact: { key: "seconds" },
   musicmood: { key: "musicMood" },
   music: { key: "musicMood" },
   ranks: { key: "ranks" },
@@ -193,6 +202,13 @@ const SETTING_KEYS: Record<string, { key: TextSetting; max: number } | { key: "s
   topicphoto: { key: "thumbnailImage" },
   image: { key: "thumbnailImage" },
   photo: { key: "thumbnailImage" },
+  kidvoice: { key: "kidVoice" },
+  kidvoices: { key: "kidVoice" },
+  voicepack: { key: "kidVoice" },
+  videotype: { key: "videoType" },
+  type: { key: "videoType" },
+  narration: { key: "narration" },
+  narrator: { key: "narration" },
 };
 
 /** RFC 4180 CSV: quoted fields, "" escapes, commas and line breaks inside quotes. */
@@ -232,17 +248,10 @@ export function parseCsvRows(text: string): string[][] {
 
 const clean = (v: string | undefined) => (v ?? "").replace(/\s+/g, " ").trim();
 
-export function parseQuizCsv(text: string): ParsedQuiz {
-  const rows = parseCsvRows(text);
-  const issues: CsvIssue[] = [];
-  const questions: QuizQuestion[] = [];
+/** The "name,value" settings lines above the header row (rows 0 .. upto-1). Shared by the quiz and facts CSVs. */
+export function parseSettingsLines(rows: string[][], upto: number, issues: CsvIssue[]): QuizSettings {
   const settings: QuizSettings = {};
-  if (!rows.length) return { questions, issues: [{ row: 0, message: "The file is empty.", level: "error" }], missingColumns: [...CSV_COLUMNS], settings };
-  const norm = (h: string | undefined) => clean(h).toLowerCase().replace(/\s+/g, "_");
-  // The header is the first row with a "question" column; the lines above it are settings
-  let h0 = rows.findIndex((r) => r.map(norm).includes("question"));
-  if (h0 < 0) h0 = 0;
-  for (let r = 0; r < h0; r++) {
+  for (let r = 0; r < upto; r++) {
     const [rawKey, ...rest] = rows[r]!;
     const value = clean(rest.filter((v) => clean(v)).join(", "));
     const k = clean(rawKey).toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -276,6 +285,21 @@ export function parseQuizCsv(text: string): ParsedQuiz {
     } else if (def.key === "seconds") {
       if (/^\d+$/.test(value) && Number(value) >= 3 && Number(value) <= 60) settings.seconds = Number(value);
       else issues.push({ row: r + 1, message: `Seconds per question must be a whole number from 3 to 60 (got "${value}"): ignored.`, level: "warning" });
+    } else if (def.key === "videoType") {
+      const v = value.toLowerCase().replace(/[^a-z]/g, "");
+      if (["facts", "fact", "didyouknow", "trivia"].includes(v)) settings.videoType = "facts";
+      else if (["quiz", "quizzes"].includes(v)) settings.videoType = "quiz";
+      else issues.push({ row: r + 1, message: `Video type must be quiz or facts (got "${value}"): ignored.`, level: "warning" });
+    } else if (def.key === "narration") {
+      const v = value.toLowerCase();
+      if (/^(ai|app|auto|voice|ai voice|tts)$/.test(v)) settings.narration = "ai";
+      else if (/^(record|recorded|recording|human|me|person)$/.test(v)) settings.narration = "record";
+      else issues.push({ row: r + 1, message: `Narration must be ai or record (got "${value}"): ignored.`, level: "warning" });
+    } else if (def.key === "kidVoice") {
+      const v = value.toLowerCase();
+      if (["on", "yes", "true", "1", "kid"].includes(v)) settings.kidVoice = true;
+      else if (["off", "no", "false", "0", "ai"].includes(v)) settings.kidVoice = false;
+      else issues.push({ row: r + 1, message: `Kid voice must be on or off (got "${value}"): ignored.`, level: "warning" });
     } else if (def.key === "musicMood") {
       const mood = MUSIC_MOODS.find((m) => m.value === value.toLowerCase());
       if (mood) settings.musicMood = mood.value;
@@ -285,6 +309,20 @@ export function parseQuizCsv(text: string): ParsedQuiz {
       settings[def.key] = value.slice(0, def.max);
     }
   }
+  return settings;
+}
+
+export function parseQuizCsv(text: string): ParsedQuiz {
+  const rows = parseCsvRows(text);
+  const issues: CsvIssue[] = [];
+  const questions: QuizQuestion[] = [];
+  const settings: QuizSettings = {};
+  if (!rows.length) return { questions, issues: [{ row: 0, message: "The file is empty.", level: "error" }], missingColumns: [...CSV_COLUMNS], settings };
+  const norm = (h: string | undefined) => clean(h).toLowerCase().replace(/\s+/g, "_");
+  // The header is the first row with a "question" column; the lines above it are settings
+  let h0 = rows.findIndex((r) => r.map(norm).includes("question"));
+  if (h0 < 0) h0 = 0;
+  Object.assign(settings, parseSettingsLines(rows, h0, issues));
   const header = rows[h0]!.map(norm);
   const col = (name: string) => header.indexOf(name);
   const required = ["question", "option_a", "option_b", "option_c", "option_d", "answer"];
@@ -345,6 +383,9 @@ export const VOICES = [
   { value: "bf_emma", label: "Emma (female, British)" },
 ] as const;
 
+/** Kid voice recordings in src\Chaos creators\sounds: intro, middle lines before some questions, ending */
+export const KID_VOICE_PACK = "kid voice sounds";
+
 /** Rough length of the finished video, matching the engine's timeline. */
 export function estimateSeconds(questions: Pick<QuizQuestion, "seconds">[], defaultSeconds: number, ranks = false, optionsDelay = 2, answerHold = 3) {
   const intro = 9.5 + (ranks ? 8 : 0);
@@ -366,6 +407,7 @@ Intro title line 1,General
 Intro title line 2,Knowledge
 Seconds per question,5
 Music mood,upbeat
+Kid voice,on
 Ranks,Quiz Rookie,Fast Learner,Smart Cookie,Quiz Expert,Quiz Genius
 YouTube title,GK Quiz: 5 Questions Only Toppers Get Right! 🧠
 YouTube description,"Think you're a GK champion? Answer 5 general knowledge questions in 5 seconds each!

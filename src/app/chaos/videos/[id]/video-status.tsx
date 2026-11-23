@@ -3,12 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ActionForm, FormMessage, SubmitButton } from "@/components/form";
-import { deleteVideoAction, stopVideoAction } from "@/modules/chaos/actions";
+import { continueCanvaAction, deleteVideoAction, stopVideoAction } from "@/modules/chaos/actions";
 import { fmtDuration, type VideoFormat } from "@/modules/chaos/csv";
 import type { JobStatus } from "@/modules/chaos/jobs";
 
-const RUNNING = ["queued", "voice", "render", "finish"];
+const RUNNING = ["canva", "queued", "voice", "render", "finish"];
 const STAGES = [
+  { key: "canva", label: "Canva designs" },
   { key: "voice", label: "Narration" },
   { key: "render", label: "Drawing frames" },
   { key: "finish", label: "Adding sound" },
@@ -86,7 +87,7 @@ export function VideoStatus({ id, title, format, initial }: { id: string; title:
                 {r.width}×{r.height}
                 {status.sizeBytes ? ` · ${fmtBytes(status.sizeBytes)}` : ""}
               </dd>
-              <dt className="text-muted">Questions</dt>
+              <dt className="text-muted">{r.facts ? "Facts" : "Questions"}</dt>
               <dd>{r.questions}</dd>
               <dt className="text-muted">Made in</dt>
               <dd>{fmtDuration(r.render_seconds)}</dd>
@@ -113,6 +114,13 @@ export function VideoStatus({ id, title, format, initial }: { id: string; title:
       <div className="card max-w-2xl space-y-3">
         <p className={status.stage === "error" ? "font-semibold text-bad" : "font-semibold text-muted"}>{status.stage === "error" ? "The video couldn't be made." : "You stopped this video."}</p>
         {status.error && <pre className="whitespace-pre-wrap rounded bg-soft p-2 text-xs">{status.error}</pre>}
+        {status.canvaRetry && (
+          <ActionForm action={continueCanvaAction} onSuccess={() => setStatus({ ...status, stage: "canva", message: "Asking Canva again…", error: undefined })}>
+            <FormMessage />
+            <input type="hidden" name="id" value={id} />
+            <SubmitButton>🎨 Continue with Canva</SubmitButton>
+          </ActionForm>
+        )}
         <div className="flex gap-2">
           <a href="/chaos" className="btn-primary">
             Back to the studio
@@ -123,6 +131,20 @@ export function VideoStatus({ id, title, format, initial }: { id: string; title:
             <SubmitButton variant="default">Delete</SubmitButton>
           </ActionForm>
         </div>
+      </div>
+    );
+  }
+
+  if (status.stage === "pictures") {
+    return (
+      <div className="card max-w-2xl space-y-3">
+        <p className="font-semibold text-[#2a1260]">🎨 Canva&apos;s designs are in. The video is waiting for your pictures (below).</p>
+        <p className="text-sm text-muted">Upload the ones you want, then the video is made. Other videos can be made meanwhile.</p>
+        <ActionForm action={deleteVideoAction} confirm={`Delete “${title}”?`}>
+          <input type="hidden" name="id" value={id} />
+          <input type="hidden" name="back" value="1" />
+          <SubmitButton variant="default">Delete</SubmitButton>
+        </ActionForm>
       </div>
     );
   }
@@ -144,6 +166,12 @@ export function VideoStatus({ id, title, format, initial }: { id: string; title:
           </li>
         ))}
       </ol>
+      {status.stage === "canva" && (
+        <p className="text-sm text-muted">
+          Canva makes the designs one at a time (about a minute each). If Canva refuses one, the studio waits 5 minutes and tries again, and past the daily Canva limit
+          (Chaos Creators → Usage) it carries on after midnight. The video is made right after.
+        </p>
+      )}
       <p className="text-sm text-muted">
         Running for {fmtDuration(status.elapsed)}
         {eta != null && eta > 0 ? ` · about ${fmtDuration(eta)} left` : ""}. You can leave this page; the video keeps being made.
