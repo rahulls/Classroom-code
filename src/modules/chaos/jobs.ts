@@ -586,6 +586,8 @@ export function setMark(id: string, mark: keyof VideoMarks, value: boolean) {
  * is what to check before making a quiz on a topic that may already be up.
  */
 export const UPLOAD_LOG = path.join(LIBRARY, "uploaded-videos.json");
+/** One row per video: what it used of Canva (kept up to date by usage.ts; opens in Excel) */
+export const CANVA_PER_VIDEO_CSV = path.join(LIBRARY, "canva-usage-per-video.csv");
 
 export type UploadLogEntry = { id: string; title: string; csv: string | null; format: VideoFormat; questions: number; madeAt: string; markedAt: string };
 

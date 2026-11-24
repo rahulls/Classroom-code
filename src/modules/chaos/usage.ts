@@ -4,7 +4,7 @@ import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { UserError } from "@/core/action";
 import { env } from "@/core/env";
-import { CHAOS_HOME } from "./jobs";
+import { CANVA_PER_VIDEO_CSV, CHAOS_HOME, getJob, jobDir, listJobs } from "./jobs";
 
 // What the studio spends on Canva's AI and on the Claude API, per day (IST), shared by Chaos
 // Creators and the Edu videos module (they use the same Canva login and the same Claude key).
@@ -31,15 +31,19 @@ const CLAUDE_PRICES: Record<string, { in: number; out: number; cacheRead: number
 export type UsageSettings = {
   /** Canva AI actions (images + designs) the studio may use per day; 0 = no limit */
   canvaDailyLimit: number;
-  /** How much fewer Canva pictures a video asks for than one per fact/question (percent) */
+  /** How much fewer Canva pictures a video asks for than one per fact/question (percent; "saving" mode) */
   canvaSavingPercent: number;
+  /** "minimum" (Rahul, 24 Nov 2026: "reduce it to minimum, create background on your own"): Canva makes
+   *  only the thumbnail and the stickers of facts without a picture of their own; backgrounds, intro and
+   *  ending are made without Canva. "saving": Canva makes everything, less canvaSavingPercent. */
+  canvaMode: "minimum" | "saving";
   /** Email the day's report the next morning */
   emailReport: boolean;
   /** Estimates for the report: rupees per Canva AI action, rupees per US dollar */
   canvaRupeesPerAction: number;
   rupeesPerDollar: number;
 };
-const DEFAULTS: UsageSettings = { canvaDailyLimit: 60, canvaSavingPercent: 20, emailReport: true, canvaRupeesPerAction: 3.3, rupeesPerDollar: 88 };
+const DEFAULTS: UsageSettings = { canvaDailyLimit: 60, canvaSavingPercent: 20, canvaMode: "minimum", emailReport: true, canvaRupeesPerAction: 3.3, rupeesPerDollar: 88 };
 
 export function usageSettings(): UsageSettings {
   try {
@@ -58,16 +62,17 @@ export function saveUsageSettings(s: UsageSettings) {
 // ------------------------------ who is asking ------------------------------
 
 // Kept on globalThis: Next loads this file more than once (pages/actions and instrumentation).
-const als: AsyncLocalStorage<{ who: string }> = ((globalThis as { __chaosUsageWho?: AsyncLocalStorage<{ who: string }> }).__chaosUsageWho ??= new AsyncLocalStorage());
+type Who = { who: string; video?: string };
+const als: AsyncLocalStorage<Who> = ((globalThis as { __chaosUsageWho2?: AsyncLocalStorage<Who> }).__chaosUsageWho2 ??= new AsyncLocalStorage());
 
 /** Runs fn with every Canva / Claude call inside it counted for `who` (e.g. the video's name). */
-export const usageFor = <T>(who: string, fn: () => Promise<T>): Promise<T> => als.run({ who }, fn);
+export const usageFor = <T>(who: string, fn: () => Promise<T>, video?: string): Promise<T> => als.run({ who, video }, fn);
 /** Calls without a label come from the Edu videos module (every Chaos path labels its calls). */
 const currentWho = () => als.getStore()?.who ?? "Edu videos";
 
 // ------------------------------ the log ------------------------------
 
-export type CanvaEntry = { at: string; kind: "canva"; action: "image" | "design"; ok: boolean; outcome: string; who: string; ms: number };
+export type CanvaEntry = { at: string; kind: "canva"; action: "image" | "design"; ok: boolean; outcome: string; who: string; ms: number; /** the Chaos job id */ video?: string };
 export type ClaudeEntry = {
   at: string;
   kind: "claude";
@@ -96,6 +101,7 @@ function append(e: Entry) {
   } catch (err) {
     console.error("[usage] couldn't log", err);
   }
+  if (e.kind === "canva") soonVideoCsv();
 }
 
 export function readDay(day: string): Entry[] {
@@ -130,10 +136,10 @@ export async function trackCanva<T>(action: "image" | "design", fn: () => Promis
   const t0 = Date.now();
   try {
     const v = await fn();
-    append({ at: new Date().toISOString(), kind: "canva", action, ok: true, outcome: "made", who: currentWho(), ms: Date.now() - t0 });
+    append({ at: new Date().toISOString(), kind: "canva", action, ok: true, outcome: "made", who: currentWho(), ms: Date.now() - t0, video: als.getStore()?.video });
     return v;
   } catch (e) {
-    append({ at: new Date().toISOString(), kind: "canva", action, ok: false, outcome: canvaOutcome(e), who: currentWho(), ms: Date.now() - t0 });
+    append({ at: new Date().toISOString(), kind: "canva", action, ok: false, outcome: canvaOutcome(e), who: currentWho(), ms: Date.now() - t0, video: als.getStore()?.video });
     throw e;
   }
 }
@@ -184,6 +190,100 @@ export function recordClaude(purpose: string, t0: number, message: { model?: str
     ms: Date.now() - t0,
   });
   return usd;
+}
+
+// ------------------------------ per video (CSV) ------------------------------
+
+/** Rebuilt a few seconds after each Canva action (Excel may have it open: then the next one writes it). */
+function soonVideoCsv() {
+  const g = globalThis as { __chaosVideoCsv?: NodeJS.Timeout };
+  if (g.__chaosVideoCsv) return;
+  g.__chaosVideoCsv = setTimeout(() => {
+    g.__chaosVideoCsv = undefined;
+    writeVideoCsv();
+  }, 5_000);
+  g.__chaosVideoCsv.unref?.();
+}
+
+const csvCell = (v: string | number) => {
+  const s = String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const istTime = (iso: string) =>
+  new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/**
+ * canva-usage-per-video.csv in the Chaos Creators folder: one row per video (Chaos job; earlier
+ * lines without a job id and Edu videos are grouped by name), newest first.
+ */
+export function writeVideoCsv(): boolean {
+  const s = usageSettings();
+  type Row = { key: string; name: string; id: string; images: number; designs: number; refused: number; first: string; last: string };
+  const rows = new Map<string, Row>();
+  // Lines from before job ids were logged: a name that only one video has is that video
+  const byTitle = new Map<string, string | null>();
+  for (const j of listJobs()) byTitle.set(j.title, byTitle.has(j.title) ? null : j.id);
+  for (const day of loggedDays()) {
+    for (const e of readDay(day)) {
+      if (e.kind !== "canva") continue;
+      const id = e.video ?? byTitle.get(e.who) ?? undefined;
+      const key = id ?? `name:${e.who}`;
+      const r = rows.get(key) ?? { key, name: e.who, id: id ?? "", images: 0, designs: 0, refused: 0, first: e.at, last: e.at };
+      if (e.ok) r[e.action === "image" ? "images" : "designs"]++;
+      else r.refused++;
+      if (e.at < r.first) r.first = e.at;
+      if (e.at > r.last) r.last = e.at;
+      rows.set(key, r);
+    }
+  }
+  const lines = [
+    ["Video", "Video id", "Type", "Format", "Status", "Canva images", "Canva designs", "AI actions", "About ₹ (estimate)", "Refused or failed", "Your own pictures", "Shared pictures", "First Canva use", "Last Canva use"].join(","),
+  ];
+  for (const r of [...rows.values()].sort((a, b) => b.first.localeCompare(a.first))) {
+    const job = r.id ? getJob(r.id) : null;
+    let yours = "";
+    let shared = "";
+    if (job) {
+      try {
+        const y = JSON.parse(fs.readFileSync(path.join(jobDir(job.id), "canva", "your-pictures.json"), "utf8")) as { slots: { name: string }[]; uploaded: string[] };
+        yours = String(y.uploaded.length);
+        shared = String(y.slots.filter((sl) => !y.uploaded.includes(sl.name)).length);
+      } catch {
+        /* made before pictures could be shared */
+      }
+    }
+    const actions = r.images + r.designs;
+    lines.push(
+      [
+        job?.title ?? r.name,
+        r.id,
+        job ? (job.kind === "facts" ? "facts" : "quiz") : /^Edu/i.test(r.name) ? "edu" : "",
+        job?.format ?? "",
+        job?.status.stage ?? (r.id ? "deleted" : ""),
+        r.images,
+        r.designs,
+        actions,
+        Math.round(actions * s.canvaRupeesPerAction),
+        r.refused,
+        yours,
+        shared,
+        istTime(r.first),
+        istTime(r.last),
+      ]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  try {
+    fs.writeFileSync(CANVA_PER_VIDEO_CSV + ".tmp", "\ufeff" + lines.join("\r\n") + "\r\n", "utf8");
+    fs.renameSync(CANVA_PER_VIDEO_CSV + ".tmp", CANVA_PER_VIDEO_CSV);
+    return true;
+  } catch (e) {
+    // Open in Excel: written again after the next Canva action
+    console.warn("[usage] couldn't write the per-video CSV:", e instanceof Error ? e.message : e);
+    fs.rmSync(CANVA_PER_VIDEO_CSV + ".tmp", { force: true });
+    return false;
+  }
 }
 
 // ------------------------------ the report ------------------------------

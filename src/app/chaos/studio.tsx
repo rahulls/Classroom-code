@@ -18,6 +18,7 @@ import {
   type VideoFormat,
 } from "@/modules/chaos/csv";
 import { detectCsvType } from "@/modules/chaos/facts";
+import { PicturesTable } from "./pictures-table";
 
 const LONG_COUNTS = [50, 100, 150];
 const SHORT_COUNTS = [5, 10, 15];
@@ -350,7 +351,7 @@ export function Studio({ busy, claudeKey, canva, initial }: { busy: boolean; cla
             )}
           </div>
         )}
-        <CanvaDesigns connected={canva} questions={used.length} />
+        <CanvaDesigns connected={canva} questions={used.length} pictures={{ csv, count, badge: style.quizBadge, title: style.title || fileName.replace(/\.csv$/i, ""), vertical: format === "shorts" }} />
       </section>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -557,7 +558,8 @@ function Generator({ hasKey, onCsv, csv, fileName }: { hasKey: boolean; onCsv: (
 }
 
 /** "Canva designs": Canva's AI makes the thumbnail and the intro / ending artwork while the video is made. */
-function CanvaDesigns({ connected, questions }: { connected: boolean; questions: number }) {
+type PictureInputs = { csv: string; count: number; badge: string; title: string; vertical: boolean };
+function CanvaDesigns({ connected, questions, pictures }: { connected: boolean; questions: number; pictures: PictureInputs }) {
   const [on, setOn] = useState(connected);
   const [perQuestion, setPerQuestion] = useState(true);
   const tooMany = questions > 25;
@@ -582,6 +584,7 @@ function CanvaDesigns({ connected, questions }: { connected: boolean; questions:
           </span>
         </label>
       )}
+      {connected && on && perQuestion && !tooMany && questions > 0 && <PicturesTable kind="quiz" {...pictures} />}
       {!connected && (
         <a href="/chaos/canva/connect?back=/chaos" className="btn mt-2 inline-block text-sm">
           Connect Canva

@@ -1,5 +1,6 @@
 import "server-only";
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { UserError } from "@/core/action";
@@ -66,15 +67,16 @@ export function canvaStatus(id: string): Status | null {
 }
 
 /** "GTA 6" from "GTA 6 Quiz" / badge "GTA 6 QUIZ". */
-function topicOf(job: JobView) {
+export function topicFrom(badgeText: string, title: string) {
   const strip = (s: string) =>
     s
       .replace(/\b(quiz|questions?|facts?|did you know|amazing)\b/gi, " ")
       .replace(/[\s:|–()-]+/g, " ")
       .trim();
-  const badge = strip(job.settings.quiz_badge ?? "");
-  return badge && badge.length <= 30 ? badge : strip(job.title) || "general knowledge";
+  const badge = strip(badgeText);
+  return badge && badge.length <= 30 ? badge : strip(title) || "general knowledge";
 }
+const topicOf = (job: JobView) => topicFrom(job.settings.quiz_badge ?? "", job.title);
 
 const SIZE = { youtube: { w: 1280, h: 720, thumb: "YouTube Thumbnail", screen: "Presentation (16:9)" }, shorts: { w: 1080, h: 1920, thumb: "Your Story", screen: "Your Story" } } as const;
 
@@ -215,6 +217,99 @@ export function saveYourPicture(id: string, name: string, data: Buffer) {
   return stillOpen(y).length;
 }
 
+// ------------- pictures chosen while creating the video (before it exists) -------------
+// "Get picture prompts" in the studio: Claude writes every picture's prompt; Rahul may upload his
+// own picture for any of them. They wait in staged-pictures\<token>\ until "Create video" moves
+// them into the job: an uploaded picture is used as it is and Canva is never asked for it.
+
+const STAGED = path.join(CHAOS_HOME, "staged-pictures");
+export const STAGE_TOKEN_RE = /^[a-f0-9]{24}$/;
+const stagedDir = (token: string) => {
+  if (!STAGE_TOKEN_RE.test(token)) throw new UserError("Those pictures have expired. Get the prompts again.");
+  return path.join(STAGED, token);
+};
+export type PromptRow = { name: string; label: string; prompt: string; canva: boolean };
+
+/** Claude's prompt for every picture of the video, kept under a new token (old ones are cleared). */
+export async function stagePicturePrompts(input: {
+  kind: "quiz" | "facts";
+  badge: string;
+  title: string;
+  questions?: { question: string; options: string[]; answer: number }[];
+  facts?: { headline: string; detail: string }[];
+}): Promise<{ token: string; rows: PromptRow[] }> {
+  // Clear staging older than 2 days
+  try {
+    for (const d of fs.readdirSync(STAGED)) if (Date.now() - fs.statSync(path.join(STAGED, d)).mtimeMs > 2 * 86_400_000) fs.rmSync(path.join(STAGED, d), { recursive: true, force: true });
+  } catch {
+    /* nothing staged yet */
+  }
+  const topic = topicFrom(input.badge, input.title);
+  const rows: PromptRow[] = [];
+  let saved: unknown;
+  if (input.kind === "facts") {
+    const facts = input.facts ?? [];
+    if (!facts.length || facts.length > MAX_QUESTION_PICTURES) throw new UserError(`Picture prompts are for videos of 1 to ${MAX_QUESTION_PICTURES} facts.`);
+    const prompts = await usageFor("Chaos studio", () => factPicturePrompts(topic, facts));
+    if (!prompts) throw new UserError("Claude didn't write the prompts. Try again.");
+    const own = picturePlan("facts", facts.length);
+    facts.forEach((f, i) => {
+      rows.push({ name: `q${i + 1}`, label: `Fact ${i + 1} background: ${f.headline}`, prompt: prompts[i]!.background, canva: own.has(i) });
+      rows.push({ name: `s${i + 1}`, label: `Fact ${i + 1} sticker: ${f.headline}`, prompt: prompts[i]!.sticker, canva: true });
+    });
+    saved = prompts;
+  } else {
+    const qs = input.questions ?? [];
+    if (!qs.length || qs.length > MAX_QUESTION_PICTURES) throw new UserError(`Picture prompts are for videos of 1 to ${MAX_QUESTION_PICTURES} questions.`);
+    const prompts = await usageFor("Chaos studio", () => questionPicturePrompts(topic, qs));
+    if (!prompts) throw new UserError("Claude didn't write the prompts. Try again.");
+    const own = picturePlan("quiz", qs.length);
+    qs.forEach((q, i) => rows.push({ name: `q${i + 1}`, label: `Question ${i + 1}: ${q.question}`, prompt: prompts[i]!, canva: own.has(i) }));
+    saved = prompts;
+  }
+  const token = randomBytes(12).toString("hex");
+  fs.mkdirSync(stagedDir(token), { recursive: true });
+  fs.writeFileSync(path.join(stagedDir(token), "prompts.json"), JSON.stringify({ kind: input.kind, prompts: saved, rows }, null, 1), "utf8");
+  return { token, rows };
+}
+
+/** Rahul's picture for one row (or, with no data, takes it off again). */
+export function stagePicture(token: string, name: string, data: Buffer | null) {
+  const dir = stagedDir(token);
+  if (!fs.existsSync(path.join(dir, "prompts.json"))) throw new UserError("Those pictures have expired. Get the prompts again.");
+  if (!/^[qs]\d{1,3}$/.test(name)) throw new UserError("Unknown picture.");
+  const file = path.join(dir, `${name}.img`);
+  if (data) fs.writeFileSync(file, data);
+  else fs.rmSync(file, { force: true });
+}
+
+/**
+ * "Create video": the staged prompts and pictures go into the new job (before its Canva work starts).
+ * hold: when Canva is done, the video waits for Rahul's pictures for the rows still shared.
+ */
+export function adoptStagedPictures(token: string | undefined, jobId: string, hold: boolean) {
+  const cdir = canvaDir(jobId);
+  fs.mkdirSync(cdir, { recursive: true });
+  const dir = token && STAGE_TOKEN_RE.test(token) ? path.join(STAGED, token) : null;
+  if (!dir || !fs.existsSync(path.join(dir, "prompts.json"))) {
+    // No table used: nothing uploaded, and the video only waits if Rahul asked
+    writeYourPictures(jobId, { slots: [], uploaded: [], released: !hold });
+    return;
+  }
+  const staged = JSON.parse(fs.readFileSync(path.join(dir, "prompts.json"), "utf8")) as { kind: "quiz" | "facts"; prompts: unknown };
+  // Claude isn't asked again: planItems reads these
+  fs.writeFileSync(path.join(cdir, staged.kind === "facts" ? "fact-prompts.json" : "question-prompts.json"), JSON.stringify(staged.prompts, null, 1), "utf8");
+  const uploaded: string[] = [];
+  for (const f of fs.readdirSync(dir)) {
+    const m = f.match(/^([qs]\d{1,3})\.img$/);
+    if (!m) continue;
+    fs.copyFileSync(path.join(dir, f), path.join(cdir, `${m[1]}-p1.png`));
+    uploaded.push(m[1]!);
+  }
+  writeYourPictures(jobId, { slots: [], uploaded, released: !hold });
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 /** The video page's list: each slot with whether it's Rahul's upload and whether a picture is there yet. */
 export function yourPictureSlots(id: string) {
   const y = yourPictures(id);
@@ -282,6 +377,17 @@ async function savedPrompts<T>(id: string, file: string, ask: () => Promise<T>):
   }
 }
 
+/**
+ * Which pictures get their own Canva picture under the saving (usageSettings): a facts video's
+ * backgrounds (every sticker is always made), or a quiz's question pictures. 0-based.
+ */
+export function picturePlan(kind: "quiz" | "facts", n: number): Set<number> {
+  const keep = 1 - Math.min(90, Math.max(0, usageSettings().canvaSavingPercent)) / 100;
+  // All of it: 3 designs + per fact 2 pictures / per question 1 (one AI action each)
+  if (kind === "facts") return spread(n, Math.max(0, Math.min(n, Math.floor((3 + 2 * n) * keep) - 3 - n)));
+  return spread(n, Math.max(0, Math.min(n, Math.floor((3 + n) * keep) - 3)));
+}
+
 /** Which of n pictures Canva makes when `own` of them are allowed (0-based), spread evenly. */
 function spread(n: number, own: number): Set<number> {
   const out = new Set<number>();
@@ -311,6 +417,8 @@ async function planItems(job: JobView): Promise<{ items: Item[]; copies: Copy[] 
       },
     },
   ];
+  // Minimum Canva use: the thumbnail (unless the CSV names a thumbnail photo) + some stickers
+  if (usageSettings().canvaMode === "minimum") return planMinimum(job, job.settings.thumb_image ? [] : items);
   const screen = (name: string, kind: "intro" | "outro" | "both", label: string): Item => ({ name, label, make: (c) => canvaDesign(screenBrief(job, kind), s.screen, c), cost: () => 1 });
   if (job.format === "youtube") items.push(screen("screens", "both", "intro and ending"));
   else items.push(screen("intro", "intro", "intro"), screen("outro", "outro", "ending"));
@@ -318,7 +426,6 @@ async function planItems(job: JobView): Promise<{ items: Item[]; copies: Copy[] 
   if (!job.settings.canva_questions) return { items, copies };
 
   const topic = topicOf(job);
-  const keep = 1 - Math.min(90, Math.max(0, usageSettings().canvaSavingPercent)) / 100;
   const intro = job.format === "youtube" ? "screens" : "intro";
   const mediaFile = (name: string) => path.join(canvaDir(id), `${name}-media.txt`);
   const picture = (name: string, label: string, prompt: string, vertical: boolean): Item => ({
@@ -332,11 +439,7 @@ async function planItems(job: JobView): Promise<{ items: Item[]; copies: Copy[] 
     const facts = jobFacts(id);
     if (!facts.length || facts.length > MAX_QUESTION_PICTURES) return { items, copies };
     const prompts = await savedPrompts(id, "fact-prompts.json", () => factPicturePrompts(topic, facts));
-    // All of it: 3 designs + 2 pictures (1 action each) per fact. Every sticker stays; backgrounds
-    // are cut until the whole video needs `keep` of that.
-    const n = facts.length;
-    const full = 3 + 2 * n;
-    const ownBg = spread(n, Math.max(0, Math.min(n, Math.floor(full * keep) - 3 - n)));
+    const ownBg = picturePlan("facts", facts.length);
     const ownList = [...ownBg].sort((a, b) => a - b);
     const SCENES = ["a wide establishing shot", "a dramatic close-up", "a night scene with glowing light", "a bright sunny scene", "an aerial view", "a moody, mysterious scene"];
     facts.forEach((f, i) => {
@@ -366,9 +469,7 @@ async function planItems(job: JobView): Promise<{ items: Item[]; copies: Copy[] 
     const qs = jobQuestions(id);
     if (!qs.length || qs.length > MAX_QUESTION_PICTURES) return { items, copies };
     const prompts = await savedPrompts(id, "question-prompts.json", () => questionPicturePrompts(topic, qs));
-    // All of it: 3 designs + one picture (1 action) per question
-    const n = qs.length;
-    const own = spread(n, Math.max(0, Math.min(n, Math.floor((3 + n) * keep) - 3)));
+    const own = picturePlan("quiz", qs.length);
     // Without Claude: varied artwork about the topic, which can't give an answer away
     const SCENES = ["a wide establishing shot", "a dramatic close-up of an object", "a night scene with neon light", "a sunny daytime scene", "an aerial view", "a moody indoor scene"];
     qs.forEach((q, i) => {
@@ -380,6 +481,135 @@ async function planItems(job: JobView): Promise<{ items: Item[]; copies: Copy[] 
     });
   }
   return { items, copies };
+}
+
+// ------------------------- minimum Canva (Rahul, 24 Nov 2026) -------------------------
+// "canva is being consumed heavily. reduce it to minimum. try to create background on your own. or
+// use old videos' images". Canva makes only the thumbnail (none when the CSV names a thumbnail
+// photo) and the stickers of facts without a picture of their own. The intro, ending and backgrounds
+// are reused from earlier videos on the same topic (already paid for); facts with a picture get it,
+// blurred, as their background (facts_video.py); the rest use the studio's own looks.
+
+const TOPIC_STOP = new Set(
+  ("quiz quizzes facts fact trivia questions question know you your didn didnt don dont how well the and for with are what who " +
+    "video videos short shorts explained breakdown final about test challenge easy medium hard fun amazing things top only true " +
+    "fans new best all can this that from did were was has have more most ever great big little part round level").split(" "),
+);
+const topicWords = (...texts: string[]) =>
+  new Set(
+    texts
+      .join(" ")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !/^\d+$/.test(w) && !TOPIC_STOP.has(w)),
+  );
+const wordsOf = (j: JobView) => topicWords(j.title, j.settings.quiz_badge ?? "", ...(j.settings.title_lines ?? []));
+
+/** Two videos are on the same topic when they share 2 topic words (or the one word a short topic has). */
+function sameTopic(a: Set<string>, b: Set<string>) {
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared >= 2 || (shared >= 1 && Math.min(a.size, b.size) === 1);
+}
+
+/** Pictures earlier videos on the same topic already got from Canva (newest first, no duplicates). */
+export function topicLibrary(job: JobView) {
+  const mine = wordsOf(job);
+  const seen = new Set<number>();
+  const uniq = (f: string) => {
+    try {
+      const size = fs.statSync(f).size;
+      if (seen.has(size)) return false;
+      seen.add(size);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const intros: { intro: string; outro: string }[] = [];
+  const same: string[] = [];
+  const other: string[] = [];
+  const jobs = listJobs()
+    .filter((j) => j.id !== job.id && sameTopic(mine, wordsOf(j)))
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  for (const j of jobs) {
+    const dir = path.join(jobDir(j.id), "canva");
+    if (!fs.existsSync(dir)) continue;
+    const at = (n: string) => (fs.existsSync(path.join(dir, n)) ? path.join(dir, n) : null);
+    if (j.format === job.format) {
+      const intro = at(job.format === "youtube" ? "screens-p1.png" : "intro-p1.png");
+      const outro = at(job.format === "youtube" ? "screens-p2.png" : "outro-p1.png") ?? intro;
+      if (intro && outro) intros.push({ intro, outro });
+    }
+    const qs = fs
+      .readdirSync(dir)
+      .filter((f) => /^q\d+-p1\.png$/.test(f))
+      .sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)))
+      .map((f) => path.join(dir, f))
+      .filter(uniq);
+    (j.format === job.format ? same : other).push(...qs);
+  }
+  return { intros, pictures: [...same, ...other], from: jobs.map((j) => j.title) };
+}
+
+/** Minimum mode: the few Canva items, after putting the reused pictures in place. */
+async function planMinimum(job: JobView, thumbnail: Item[]): Promise<{ items: Item[]; copies: Copy[] }> {
+  const id = job.id;
+  const dir = canvaDir(id);
+  const lib = topicLibrary(job);
+  const put = (name: string, from: string | undefined) => {
+    if (!from || madeAlready(id, name)) return false;
+    fs.copyFileSync(from, path.join(dir, `${name}-p1.png`));
+    return true;
+  };
+  // Intro and ending: from the newest same-topic video of this format (else the studio's own looks)
+  const scr = lib.intros[0];
+  if (scr) {
+    if (job.format === "youtube") {
+      if (!madeAlready(id, "screens") && scr.intro) {
+        fs.copyFileSync(scr.intro, path.join(dir, "screens-p1.png"));
+        fs.copyFileSync(scr.outro, path.join(dir, "screens-p2.png"));
+      }
+    } else {
+      put("intro", scr.intro);
+      put("outro", scr.outro);
+    }
+  }
+  const items = [...thumbnail];
+  let next = 0;
+  const reuse = (name: string) => put(name, lib.pictures[next]) && next++;
+  if (job.kind === "facts") {
+    const facts = jobFacts(id);
+    if (!facts.length || facts.length > MAX_QUESTION_PICTURES) return { items, copies: [] };
+    // Backgrounds: a fact with its own picture gets it blurred (engine); the others reuse pictures
+    facts.forEach((f, i) => {
+      if (!f.image && job.settings.canva_questions) reuse(`q${i + 1}`);
+    });
+    // Stickers: only for facts without a picture of their own
+    const need = facts.map((f, i) => ({ f, i })).filter(({ f, i }) => !f.image && !madeAlready(id, `s${i + 1}`));
+    if (need.length && job.settings.canva_questions) {
+      const prompts = await savedPrompts(id, "fact-prompts.json", () => factPicturePrompts(topicOf(job), facts));
+      for (const { f, i } of need) {
+        const prompt =
+          prompts?.[i]?.sticker ??
+          `A bold, colourful cartoon illustration of the main subject of this fact: "${f.headline}". One clear subject, centred, filling the middle of the frame, plain light background, thick outlines, like a sticker. No people's faces. No text, no logos.`;
+        const name = `s${i + 1}`;
+        const mediaFile = path.join(dir, `${name}-media.txt`);
+        items.push({
+          name,
+          label: `fact ${i + 1} sticker`,
+          make: async (c: Client) => ({ pages: await canvaPicture(prompt, false, c, mediaFile) }),
+          cost: () => (fs.existsSync(mediaFile) ? 0 : 1),
+        });
+      }
+    }
+  } else if (job.settings.canva_questions) {
+    const qs = jobQuestions(id);
+    // Same-topic pictures only: never another topic's art. The rest: the studio's own look
+    qs.forEach((_, i) => reuse(`q${i + 1}`));
+  }
+  if (lib.from.length) console.log(`[canva] ${id} minimum: reused ${next} picture(s)${scr ? " + intro/ending" : ""} from ${lib.from.length} earlier video(s)`);
+  return { items, copies: [] };
 }
 
 /** The pictures that are copies: each from the first of its sources Canva made. */
@@ -403,7 +633,7 @@ export async function canvaForJob(id: string) {
   working.add(id);
   try {
     // Every Canva / Claude call of this video is counted for it in the usage report
-    await usageFor(job.title, () => makeAll(job));
+    await usageFor(job.title, () => makeAll(job), job.id);
   } catch (e) {
     console.error("[canva]", id, e);
   } finally {
@@ -420,8 +650,10 @@ async function makeAll(job: JobView) {
   const known = yourPictures(id);
   writeYourPictures(id, {
     slots: copies.map((c) => ({ name: c.name, label: c.label, prompt: c.prompt, vertical: c.vertical })),
-    uploaded: known?.uploaded.filter((n) => copies.some((c) => c.name === n)) ?? [],
-    released: known?.released,
+    // Every picture Rahul uploaded (shared ones and ones Canva would have made), for the usage CSV
+    uploaded: known?.uploaded ?? [],
+    // Only waits when Rahul ticked "Wait for me after Canva" (adoptStagedPictures)
+    released: known ? known.released : true,
   });
   const queue = all.filter((it) => !madeAlready(id, it.name));
   const left: Item[] = [];
@@ -563,6 +795,9 @@ export function startCanvaSweep() {
 
 /** Every video gets a Canva thumbnail, Canva designs on or off. Never throws. */
 export async function canvaThumbnailForJob(id: string) {
+  // Minimum Canva use: a video whose CSV names a thumbnail photo gets the engine's photo thumbnail
+  const job = getJob(id);
+  if (job?.settings.thumb_image && usageSettings().canvaMode === "minimum") return;
   try {
     await withCanva((client) => thumbnailWithClient(id, client));
   } catch (e) {
@@ -594,7 +829,7 @@ async function thumbnailWithClient(id: string, client: Parameters<Parameters<typ
     if (i === THUMB_RETRY_WAITS.length - 1)
       brief += "\nUse original artwork inspired by the topic only: no copyrighted characters, film stills, posters or official logos.";
     try {
-      const d = await usageFor(job.title, () => canvaDesign(brief, SIZE[job.format].thumb, client));
+      const d = await usageFor(job.title, () => canvaDesign(brief, SIZE[job.format].thumb, client), job.id);
       savePages(id, "thumbnail", d.pages);
       thumbStatus(id, { state: "done", design: d.url ?? d.designId, tries: i + 1 });
       try {
@@ -634,7 +869,7 @@ function runImages(args: string[]): Promise<void> {
 export async function canvaThumbnail(id: string) {
   const job = getJob(id);
   if (!job) throw new UserError("Video not found.");
-  const d = await usageFor(job.title, () => canvaDesign(thumbnailBrief(job), SIZE[job.format].thumb));
+  const d = await usageFor(job.title, () => canvaDesign(thumbnailBrief(job), SIZE[job.format].thumb), job.id);
   fs.mkdirSync(canvaDir(id), { recursive: true });
   savePages(id, "thumbnail", d.pages);
   try {

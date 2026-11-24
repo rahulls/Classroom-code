@@ -38,3 +38,6 @@ __pycache__/
 
 # Recorded kid voice clips: personal recordings, never in the (public) repo
 /src/Chaos creators/sounds/kid voice sounds/
+
+# Copyrighted film stills Rahul supplies for commentary videos: kept out of the public repo
+/src/Chaos creators/images/doomsday_*

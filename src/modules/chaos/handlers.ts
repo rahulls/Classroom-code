@@ -41,7 +41,7 @@ import {
   saveRecording,
   setIntroOutro,
 } from "./facts-drafts";
-import { MAX_PICTURE_BYTES, canvaThumbnail, canvaForJob, canvaThumbnailForJob, continueCanva, releasePictures, saveYourPicture } from "./canva-jobs";
+import { MAX_PICTURE_BYTES, adoptStagedPictures, canvaThumbnail, canvaForJob, canvaThumbnailForJob, continueCanva, releasePictures, saveYourPicture, stagePicturePrompts } from "./canva-jobs";
 import { canvaConnection, disconnectCanva } from "./canva";
 import { emailReport, istDay, saveUsageSettings } from "./usage";
 import {
@@ -92,6 +92,8 @@ export const createVideoAction = defineAction({
     kidVoice: z.string().optional(),
     canva: z.string().optional(),
     canvaQuestions: z.string().optional(),
+    picturesToken: z.string().optional(),
+    holdPictures: z.string().optional(),
   }),
   run: async (input, { user }) => {
     const ready = engineReady();
@@ -129,6 +131,8 @@ export const createVideoAction = defineAction({
         ranks: input.format !== "youtube" ? undefined : !input.ranksOn ? ["off"] : parseRanks(input.ranks ?? "").length >= 2 ? parseRanks(input.ranks ?? "") : undefined,
       },
     });
+    // Pictures chosen in the studio's table (an upload means Canva isn't asked for that one)
+    if (job.settings.canva_questions) adoptStagedPictures(input.picturesToken, job.id, !!input.holdPictures);
     // Runs on while the engine records the narration. The Canva thumbnail is made for every video.
     if (job.settings.canva) void canvaForJob(job.id);
     else void canvaThumbnailForJob(job.id);
@@ -166,6 +170,8 @@ export const createFactsVideoAction = defineAction({
     canva: z.string().optional(),
     canvaFacts: z.string().optional(),
     introOutro: z.string().optional(),
+    picturesToken: z.string().optional(),
+    holdPictures: z.string().optional(),
   }),
   run: async (input, { user }) => {
     const parsed = parseFactsCsv(input.csv);
@@ -201,6 +207,7 @@ export const createFactsVideoAction = defineAction({
     if (!ready.ok) return { ok: false, error: ready.problem! };
     if (listJobs().some(isRunning)) return { ok: false, error: "Another video is being made. Wait for it to finish (or stop it) first: one at a time keeps the laptop usable." };
     const job = createFactsJob({ title, format: input.format, facts, narration: "ai", settings, userId: user.id, fileName: input.fileName, sourceCsv: input.csv, youtube });
+    if (job.settings.canva_questions) adoptStagedPictures(input.picturesToken, job.id, !!input.holdPictures);
     if (job.settings.canva) void canvaForJob(job.id);
     else void canvaThumbnailForJob(job.id);
     await audit({ action: "chaos.video.created", actor: user, entity: "chaos_video", entityId: job.id, after: { kind: "facts", format: job.format, facts: job.questions } });
@@ -384,6 +391,33 @@ export const continueCanvaAction = defineAction({
   },
 });
 
+/**
+ * "Get picture prompts" in the studio: Claude's prompt for every picture of the video about to be
+ * made (one call, a few cents), for the table where Rahul can upload his own pictures.
+ */
+export const picturePromptsAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    kind: z.enum(["quiz", "facts"]),
+    csv: z.string().min(1, "Upload a CSV first").max(MAX_CSV_BYTES),
+    count: z.coerce.number().int().min(0).max(1000),
+    badge: text(40),
+    title: text(120),
+  }),
+  run: async (input) => {
+    const badge = input.badge ?? "";
+    const title = input.title ?? "";
+    if (input.kind === "facts") {
+      const all = parseFactsCsv(input.csv).facts;
+      const facts = input.count ? all.slice(0, input.count) : all;
+      return { ok: true, data: await stagePicturePrompts({ kind: "facts", badge, title, facts }) };
+    }
+    const all = parseQuizCsv(input.csv).questions;
+    const questions = input.count ? all.slice(0, input.count) : all;
+    return { ok: true, data: await stagePicturePrompts({ kind: "quiz", badge, title, questions }) };
+  },
+});
+
 /** Rahul's own picture for a fact / question without its own Canva picture (from its prompt). */
 export const uploadYourPictureAction = defineAction({
   permission: PERMISSION,
@@ -465,6 +499,7 @@ export const saveUsageSettingsAction = defineAction({
   schema: z.object({
     canvaDailyLimit: z.coerce.number().int("A whole number").min(0).max(2000),
     canvaSavingPercent: z.coerce.number().int("A whole number").min(0, "0 to 60").max(60, "0 to 60"),
+    canvaMode: z.enum(["minimum", "saving"]),
     emailReport: checkbox,
     canvaRupeesPerAction: z.coerce.number().min(0).max(100),
     rupeesPerDollar: z.coerce.number().min(1).max(500),

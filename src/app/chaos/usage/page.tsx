@@ -1,4 +1,4 @@
-import { ActionForm, CheckboxField, FormMessage, SubmitButton, TextField } from "@/components/form";
+import { ActionForm, CheckboxField, FormMessage, SelectField, SubmitButton, TextField } from "@/components/form";
 import { emailUsageReportAction, saveUsageSettingsAction } from "@/modules/chaos/actions";
 import { canvaToday, istDay, loggedDays, summarise, usageSettings } from "@/modules/chaos/usage";
 
@@ -143,6 +143,18 @@ export default function UsagePage() {
         <h2 className="font-semibold text-[#2a1260]">Settings</h2>
         <ActionForm action={saveUsageSettingsAction}>
           <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField
+              name="canvaMode"
+              label="Canva use per video"
+              required
+              className="sm:col-span-2"
+              defaultValue={s.canvaMode}
+              options={[
+                { value: "minimum", label: "Minimum: Canva makes only the thumbnail and the stickers of facts without a picture of their own" },
+                { value: "saving", label: "Everything from Canva (thumbnail, intro, ending, backgrounds, stickers), less the % below" },
+              ]}
+              hint="Minimum: backgrounds, intro and ending are made without Canva: pictures from earlier videos on the same topic, a fact's own picture (blurred), or the studio's own looks. A quiz then needs 1 Canva action, a facts video 1 + one per fact without a picture."
+            />
             <TextField
               name="canvaDailyLimit"
               label="Daily Canva limit (AI actions)"
@@ -150,7 +162,7 @@ export default function UsagePage() {
               min={0}
               required
               defaultValue={String(s.canvaDailyLimit)}
-              hint="When it's used up, videos waiting for Canva carry on after midnight. 0 = no limit. A 10-fact video needs about 33, a 7-question quiz about 13."
+              hint="When it's used up, videos waiting for Canva carry on after midnight. 0 = no limit. "
             />
             <TextField
               name="canvaSavingPercent"
@@ -160,7 +172,7 @@ export default function UsagePage() {
               max={60}
               required
               defaultValue={String(s.canvaSavingPercent)}
-              hint="Each video asks Canva for this much less: neighbouring facts share a background, and some quiz questions show the intro artwork."
+              hint="Only with Everything from Canva. Each video asks Canva for this much less: neighbouring facts share a background, and some quiz questions show the intro artwork."
             />
             <TextField
               name="canvaRupeesPerAction"

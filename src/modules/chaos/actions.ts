@@ -59,6 +59,10 @@ export async function continueCanvaAction(prev: ActionState, fd: FormData): Prom
   return h.continueCanvaAction(prev, fd);
 }
 
+export async function picturePromptsAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.picturePromptsAction(prev, fd);
+}
+
 export async function uploadYourPictureAction(prev: ActionState, fd: FormData): Promise<ActionState> {
   return h.uploadYourPictureAction(prev, fd);
 }

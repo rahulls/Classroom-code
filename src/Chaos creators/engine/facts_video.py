@@ -292,20 +292,34 @@ def build_timeline(cfg, facts, voice, job, sounds, kid=None, own_middles=None, o
 
 
 # ============================== visuals ==============================
-def sticker_card(path, size, tilt):
-    """A picture as a white-framed, tilted sticker with a soft shadow (RGBA), or None."""
+def sticker_card(path, size, tilt, whole=False):
+    """A picture as a white-framed, tilted sticker with a soft shadow (RGBA), or None.
+    whole: keep the picture's own shape (Rahul's pictures: a wide film still must not lose the people
+    at its sides); else a square from the middle (Canva stickers are drawn for that)."""
     try:
         src = Image.open(path).convert("RGB")
     except Exception as e:
         print(f"[sticker] {path}: {e}", flush=True)
         return None
-    side = min(src.size)
-    src = src.crop(((src.width - side) // 2, (src.height - side) // 3, (src.width - side) // 2 + side, (src.height - side) // 3 + side))
+    if whole:
+        ratio = min(1.8, max(0.75, src.width / src.height))
+        if src.width / src.height > ratio:               # wider than allowed: trim the sides a little
+            w = round(src.height * ratio)
+            src = src.crop(((src.width - w) // 2, 0, (src.width - w) // 2 + w, src.height))
+        elif src.width / src.height < ratio:
+            h = round(src.width / ratio)
+            src = src.crop((0, (src.height - h) // 3, src.width, (src.height - h) // 3 + h))
+        cw = min(size * 1.35, size * math.sqrt(ratio)) if ratio >= 1 else min(size * 1.2, size / math.sqrt(ratio)) * ratio
+        cw, ch = round(cw), round(cw / ratio)
+    else:
+        side = min(src.size)
+        src = src.crop(((src.width - side) // 2, (src.height - side) // 3, (src.width - side) // 2 + side, (src.height - side) // 3 + side))
+        cw = ch = size
     b = max(8, size // 24)
-    inner = src.resize((size - 2 * b, size - 2 * b), Image.LANCZOS)
-    card = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    m = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(m).rounded_rectangle([0, 0, size - 1, size - 1], size // 8, fill=255)
+    inner = src.resize((cw - 2 * b, ch - 2 * b), Image.LANCZOS)
+    card = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+    m = Image.new("L", (cw, ch), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, cw - 1, ch - 1], size // 8, fill=255)
     card.paste((255, 255, 255, 255), (0, 0), m)
     mi = Image.new("L", inner.size, 0)
     ImageDraw.Draw(mi).rounded_rectangle([0, 0, inner.width - 1, inner.height - 1], size // 11, fill=255)
@@ -339,14 +353,50 @@ def _tilt_shadow(card, tilt):
     return out
 
 
+def own_backgrounds(job_dir, facts, cfg, lay):
+    """Backgrounds made without Canva (Rahul, 24 Nov 2026): a fact that has no Canva background but a
+    picture of its own (the CSV's image column) gets that picture, filled to the frame, heavily blurred
+    and darkened towards the edges, as its background. The rest keep the usual look."""
+    W, H = lay["W"], lay["H"]
+    files = list((cfg.get("question_images") or {}).get("files") or [])
+    files += [None] * (len(facts) - len(files))
+    made = 0
+    for i, f in enumerate(facts):
+        if files[i] or not f.get("image"):
+            continue
+        try:
+            im = Image.open(f["image"]).convert("RGB")
+        except Exception as e:
+            print(f"[own-bg] fact {i + 1}: {e}", flush=True)
+            continue
+        s = max(W / im.width, H / im.height) * 1.1
+        im = im.resize((math.ceil(im.width * s), math.ceil(im.height * s)), Image.LANCZOS)
+        x, y = (im.width - W) // 2, (im.height - H) // 2
+        im = im.crop((x, y, x + W, y + H)).filter(ImageFilter.GaussianBlur(max(W, H) / 70))
+        # A soft vignette: darker edges keep the frame calm around the card
+        yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+        r = np.sqrt(((xx - W / 2) / (W / 2)) ** 2 + ((yy - H / 2) / (H / 2)) ** 2)
+        k = np.clip(1.0 - 0.45 * np.clip(r - 0.35, 0, None), 0.45, 1.0)[..., None]
+        im = Image.fromarray((np.asarray(im, np.float32) * k).astype(np.uint8))
+        out = pathlib.Path(job_dir) / "own-bg" / f"f{i + 1}.png"
+        out.parent.mkdir(exist_ok=True)
+        im.save(out)
+        files[i] = str(out)
+        made += 1
+    if made:
+        cfg["question_images"] = {"mode": "background", "files": files}
+        print(f"[own-bg] {made} background(s) from the facts' own pictures", flush=True)
+
+
 def fact_sticker(idx, size):
     cache = G.setdefault("FST", {})
     if (idx, size) not in cache:
         files = G["CFG"].get("fact_stickers") or []
         f = G["FACTS"][idx]
-        path = (files[idx] if idx < len(files) else None) or f.get("image")
+        # The CSV's own picture (Rahul's) wins over a Canva sticker
+        path = f.get("image") or (files[idx] if idx < len(files) else None)
         tilt = -6 if idx % 2 else 6
-        st = sticker_card(path, size, tilt) if path else None
+        st = sticker_card(path, size, tilt, whole=bool(f.get("image")) and path == f.get("image")) if path else None
         cache[(idx, size)] = st if st is not None else bulb_card(size, tilt, ACC[idx % len(ACC)])
     return cache[(idx, size)]
 
@@ -611,14 +661,14 @@ def design_thumbnail(job_dir, seed=None):
         pill("DID YOU KNOW?", 340, 110, 44, PINK + (255,), (255, 255, 255), 600)
         y = big(keyword, 340, 170, 120, 620, GOLD)
         pill(hook, 340, min(y + 70, H - 190), 40, (255, 255, 255, 255), INK, 620)
-        st = sticker_card(pick[1], 470, tilt) if pick[1] else bulb_card(470, tilt, ACC[pick[0] % len(ACC)])
+        st = sticker_card(pick[1], 470, tilt, whole="canva" not in pathlib.Path(pick[1]).parts) if pick[1] else bulb_card(470, tilt, ACC[pick[0] % len(ACC)])
         composite(img, st, int(960 - st.width / 2), int(H / 2 - st.height / 2))
         logo = qv.round_logo(qv.TEMPLATE / cfg["logo"]).resize((110, 110), Image.LANCZOS)
         img.alpha_composite(logo, (22, H - 132))
     else:
         pill("DID YOU KNOW?", W / 2, 190, 64, PINK + (255,), (255, 255, 255), 900)
         y = big(keyword, W / 2, 290, 170, 960, GOLD)
-        st = sticker_card(pick[1], 720, tilt) if pick[1] else bulb_card(720, tilt, ACC[pick[0] % len(ACC)])
+        st = sticker_card(pick[1], 720, tilt, whole="canva" not in pathlib.Path(pick[1]).parts) if pick[1] else bulb_card(720, tilt, ACC[pick[0] % len(ACC)])
         cy = (y + 40 + H - 360) / 2
         composite(img, st, int(W / 2 - st.width / 2), int(cy - st.height / 2))
         pill(hook, W / 2, H - 300, 62, (255, 255, 255, 255), INK, 980)
@@ -685,6 +735,8 @@ def main(job_dir):
             stickers = [(lambda p: str(p[0]) if p else None)(canva_images.pages(job.dir, f"s{i + 1}")) for i in range(len(facts))]
             cfg["fact_stickers"] = stickers
             print(f"[canva] backgrounds {sum(1 for b in bgs if b)}/{len(facts)}, stickers {sum(1 for s in stickers if s)}/{len(facts)}", flush=True)
+
+    own_backgrounds(job.dir, facts, cfg, qv.LAYOUTS[fmt_name])
 
     FF = qv.ffmpeg_exe()
     lay = qv.LAYOUTS[fmt_name]

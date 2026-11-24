@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ActionForm, FormMessage, Req, SubmitButton } from "@/components/form";
 import { createFactsVideoAction, generateFactsAction, saveClaudeKeyAction } from "@/modules/chaos/actions";
 import { FORMATS, MAX_CSV_BYTES, VOICES, fmtDuration, type VideoFormat } from "@/modules/chaos/csv";
+import { PicturesTable } from "./pictures-table";
 import { DEFAULT_FACT_BADGE, FACT_COUNTS, GENERATE_FACT_COUNTS, detectCsvType, estimateFactsSeconds, factSeconds, parseFactsCsv, planMiddleCards } from "@/modules/chaos/facts";
 import { CountChip, Field, Step } from "./studio";
 
@@ -323,7 +324,7 @@ export function FactsStudio({ busy, claudeKey, canva, initial }: { busy: boolean
             </p>
           </Field>
         </div>
-        <FactsCanva connected={canva} facts={used.length} />
+        <FactsCanva connected={canva} facts={used.length} pictures={narration === "ai" ? { csv, count, badge: style.quizBadge, title: style.title || fileName.replace(/\.csv$/i, ""), vertical: format === "shorts" } : null} />
       </section>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -368,7 +369,7 @@ function ChoiceCard({ active, onClick, icon, title, text }: { active: boolean; o
 }
 
 /** Canva: thumbnail, intro and ending; optionally a background and a sticker for every fact. */
-function FactsCanva({ connected, facts }: { connected: boolean; facts: number }) {
+function FactsCanva({ connected, facts, pictures }: { connected: boolean; facts: number; pictures: { csv: string; count: number; badge: string; title: string; vertical: boolean } | null }) {
   const [on, setOn] = useState(connected);
   const [perFact, setPerFact] = useState(true);
   const tooMany = facts > MAX_FACT_PICTURES;
@@ -390,6 +391,8 @@ function FactsCanva({ connected, facts }: { connected: boolean; facts: number })
       <p className="mt-1 text-xs text-muted">
         Without Canva art, a fact shows its picture from the CSV&apos;s image column, or a bright “?” badge. Every design is also saved in your Canva folder.
       </p>
+      {connected && on && perFact && !tooMany && facts > 0 && pictures && <PicturesTable kind="facts" {...pictures} />}
+      {connected && on && perFact && !pictures && <p className="mt-2 text-xs text-muted">With recorded narration, add your own pictures on the video&apos;s page once it&apos;s made.</p>}
       {!connected && (
         <a href="/chaos/canva/connect?back=/chaos?type=facts" className="btn mt-2 inline-block text-sm">
           Connect Canva

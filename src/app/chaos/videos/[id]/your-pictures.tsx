@@ -29,7 +29,7 @@ export function YourPictures({ id, slots, waiting, kind }: { id: string; slots: 
             Canva is done. The video waits for you: {open} picture{open === 1 ? "" : "s"} still to add. It starts by itself once the last one is uploaded.
           </p>
         ) : (
-          <p className="mt-2 text-xs text-muted">You can upload now, while Canva works. When Canva is done, the video waits here for any still missing.</p>
+          <p className="mt-2 text-xs text-muted">You can upload now, while Canva works. Anything uploaded before Canva finishes goes into the video.</p>
         )}
       </div>
 
