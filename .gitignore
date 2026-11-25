@@ -41,3 +41,6 @@ __pycache__/
 
 # Copyrighted film stills Rahul supplies for commentary videos: kept out of the public repo
 /src/Chaos creators/images/doomsday_*
+
+# Rahul's private video ideas
+/src/Chaos creators/ideas.md
