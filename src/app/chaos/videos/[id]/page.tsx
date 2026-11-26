@@ -27,7 +27,8 @@ export default async function ChaosVideoPage({ params }: { params: Promise<{ id:
       <h1 className="text-2xl font-bold text-[#2a1260]">{job.title}</h1>
       <p className="mb-5 text-sm text-muted">
         {job.kind === "facts" ? `💡 Facts video${job.narration === "record" ? " (recorded narration)" : ""} · ` : ""}
-        {FORMATS[job.format].label} ({FORMATS[job.format].detail}) · {job.questions} {job.kind === "facts" ? "fact" : "question"}
+        {job.kind === "flags" ? `🚩 Flag memory game (${job.flags?.level ?? "easy"}) · ` : ""}
+        {FORMATS[job.format].label} ({FORMATS[job.format].detail}) · {job.questions} {job.kind === "facts" ? "fact" : job.kind === "flags" ? "round" : "question"}
         {job.questions === 1 ? "" : "s"} · made{" "}
         {new Date(job.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
       </p>
@@ -84,7 +85,7 @@ function Publish({ job }: { job: JobView }) {
         </div>
         <p className="text-xs text-muted">
           {job.format === "shorts" ? "1080×1920 cover, for Shorts and Reels." : "1280×720, the size YouTube wants."} Each design is different:{" "}
-          {job.kind === "facts" ? "new background, picture and slogan." : "new colours, layout, featured question and slogan. The answer is never shown."}
+          {job.kind === "flags" ? "different flags and tilt." : job.kind === "facts" ? "new background, picture and slogan." : "new colours, layout, featured question and slogan. The answer is never shown."}
           {canvaConnection().connected ? (
             " 🎨 Canva thumbnail asks Canva's AI for a full SEO-friendly design about the topic (1–2 minutes; also saved in your Canva folder)."
           ) : (

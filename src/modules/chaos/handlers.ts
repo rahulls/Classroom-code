@@ -25,6 +25,8 @@ import {
 } from "./csv";
 import { generateFactsCsv, generateQuizCsv, saveClaudeKey } from "./generate";
 import { GENERATE_FACT_COUNTS, parseFactsCsv } from "./facts";
+import { FLAG_LEVELS, FLAG_LIMITS, roundProblems, type FlagLevel, type FlagOptions, type FlagRound } from "./flags";
+import { addFlagsLog } from "./flags-log";
 import {
   CARD_KEY_RE,
   MAX_RECORDING_BYTES,
@@ -46,6 +48,7 @@ import { canvaConnection, disconnectCanva } from "./canva";
 import { emailReport, istDay, saveUsageSettings } from "./usage";
 import {
   createFactsJob,
+  createFlagsJob,
   createJob,
   deleteJob,
   designThumbnail,
@@ -137,6 +140,67 @@ export const createVideoAction = defineAction({
     if (job.settings.canva) void canvaForJob(job.id);
     else void canvaThumbnailForJob(job.id);
     await audit({ action: "chaos.video.created", actor: user, entity: "chaos_video", entityId: job.id, after: { format: job.format, questions: job.questions } });
+    revalidatePath("/chaos");
+    redirect(`/chaos/videos/${job.id}`);
+  },
+});
+
+// ------------------------- Flag Memory Challenge videos -------------------------
+
+const num = (lo: number, hi: number, what: string) => z.coerce.number().min(lo, `${what}: at least ${lo}`).max(hi, `${what}: at most ${hi}`);
+
+/** A Flag Memory Challenge from the studio's Flags tab: the rounds the page previewed (checked again here). */
+export const createFlagsVideoAction = defineAction({
+  permission: PERMISSION,
+  schema: z.object({
+    format: z.enum(Object.keys(FORMATS) as [keyof typeof FORMATS, ...(keyof typeof FORMATS)[]]),
+    level: z.enum(Object.keys(FLAG_LEVELS) as [FlagLevel, ...FlagLevel[]]),
+    rounds: z.string().min(2, "Pick the flags first").max(20_000),
+    show: num(FLAG_LIMITS.show[0], FLAG_LIMITS.show[1], "Flags shown").int(),
+    find: num(FLAG_LIMITS.find[0], FLAG_LIMITS.find[1], "Flags to find").int(),
+    grid: num(FLAG_LIMITS.grid[0], FLAG_LIMITS.grid[1], "Flags in the grid").int(),
+    flagSeconds: num(FLAG_LIMITS.flagSeconds[0], FLAG_LIMITS.flagSeconds[1], "Seconds per flag"),
+    searchSeconds: num(FLAG_LIMITS.searchSeconds[0], FLAG_LIMITS.searchSeconds[1], "Seconds to search").int(),
+    title: text(80),
+    badge: text(24),
+    voice: z.enum(VOICES.map((v) => v.value) as [string, ...string[]]),
+    kidVoice: z.string().optional(),
+    youtubeTitle: text(YT_TITLE_MAX),
+    youtubeDescription: z.string().max(YT_DESCRIPTION_MAX).optional(),
+    youtubeTags: z.string().max(YT_TAGS_MAX + 200).optional(),
+  }),
+  run: async (input, { user }) => {
+    const ready = engineReady();
+    if (!ready.ok) return { ok: false, error: ready.problem! };
+    if (listJobs().some(isRunning)) return { ok: false, error: "Another video is being made. Wait for it to finish (or stop it) first: one at a time keeps the laptop usable." };
+    if (input.find >= input.show) return { ok: false, error: "Flags to find must be fewer than the flags shown." };
+    if (input.grid < input.find * 2) return { ok: false, error: "The grid needs at least twice as many flags as there are to find." };
+    const options: FlagOptions = { show: input.show, find: input.find, grid: input.grid, flagSeconds: input.flagSeconds, searchSeconds: input.searchSeconds };
+    let rounds: FlagRound[];
+    try {
+      rounds = JSON.parse(input.rounds) as FlagRound[];
+    } catch {
+      return { ok: false, error: "The flags didn't come through. Press Shuffle and try again." };
+    }
+    if (!Array.isArray(rounds) || rounds.length < FLAG_LIMITS.rounds[0] || rounds.length > FLAG_LIMITS.rounds[1]) return { ok: false, error: `1 to ${FLAG_LIMITS.rounds[1]} rounds.` };
+    for (const [i, rd] of rounds.entries()) {
+      const p = roundProblems(rd, options);
+      if (p.length) return { ok: false, error: `Round ${i + 1} doesn't fit the settings (${p.join(", ")}). Press Shuffle to pick again.` };
+    }
+    const level = FLAG_LEVELS[input.level].label;
+    const job = createFlagsJob({
+      title: input.title || `Flag Memory Challenge (${level})`,
+      format: input.format,
+      level: input.level,
+      options,
+      rounds,
+      userId: user.id,
+      settings: { voice: input.voice, quiz_badge: (input.badge || "FLAG MEMORY CHALLENGE").toUpperCase(), voice_pack: input.kidVoice ? KID_VOICE_PACK : "off" },
+      youtube: { title: input.youtubeTitle, description: input.youtubeDescription, tags: input.youtubeTags ? parseTags(input.youtubeTags) : undefined, category: "24" },
+    });
+    // The series record: which flags each video used (the Flags tab avoids them next time)
+    addFlagsLog({ jobId: job.id, title: job.title, level: input.level, format: job.format, createdAt: job.createdAt, rounds });
+    await audit({ action: "chaos.video.created", actor: user, entity: "chaos_video", entityId: job.id, after: { kind: "flags", format: job.format, level: input.level, rounds: rounds.length } });
     revalidatePath("/chaos");
     redirect(`/chaos/videos/${job.id}`);
   },

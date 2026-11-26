@@ -1,0 +1,4 @@
+National flag pictures for the Flag Memory Challenge videos (flags_video.py).
+Downloaded 2026-11-26 from flagcdn.com (1280 px PNG). National flags are public-domain designs;
+flagcdn.com offers these images free of charge. countries.json: ISO code -> display name
+(sovereign countries only; territories, sub-national flags, EU and UN left out).

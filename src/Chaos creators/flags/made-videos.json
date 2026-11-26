@@ -1,0 +1,66 @@
+{
+ "videos": [
+  {
+   "jobId": "mwxseggnda2471b7",
+   "title": "🚩⚡ FLAG FLASH",
+   "level": "easy",
+   "format": "shorts",
+   "createdAt": "2026-11-26T16:48:52.440Z",
+   "rounds": [
+    {
+     "show": [
+      "ar",
+      "sa",
+      "ng",
+      "fr",
+      "gb",
+      "il",
+      "jp",
+      "gr",
+      "ke",
+      "pk"
+     ],
+     "find": [
+      "fr",
+      "ke",
+      "jp",
+      "sa",
+      "gb"
+     ],
+     "grid": [
+      "nz",
+      "tr",
+      "in",
+      "ca",
+      "qa",
+      "kr",
+      "pt",
+      "np",
+      "fr",
+      "de",
+      "ch",
+      "th",
+      "es",
+      "cn",
+      "ru",
+      "my",
+      "sa",
+      "ke",
+      "jm",
+      "lk",
+      "jp",
+      "br",
+      "us",
+      "ae",
+      "mx",
+      "ie",
+      "co",
+      "fi",
+      "se",
+      "gb"
+     ]
+    }
+   ]
+  }
+ ]
+}

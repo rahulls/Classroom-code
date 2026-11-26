@@ -33,7 +33,8 @@ export default async function ChaosDashboardPage({ searchParams }: { searchParam
     const marks = getMarks(j.id);
     // Facts videos (Did-you-know) have their own defaults in facts_video.py
     const facts = j.kind === "facts";
-    const lines = j.settings.title_lines?.length ? j.settings.title_lines : facts ? ["Amazing", "Facts"] : d.titleLines;
+    const flags = j.kind === "flags";
+    const lines = j.settings.title_lines?.length ? j.settings.title_lines : flags ? ["Let's play", "A memory game!"] : facts ? ["Amazing", "Facts"] : d.titleLines;
     return {
       id: j.id,
       createdAt: j.createdAt,
@@ -42,9 +43,9 @@ export default async function ChaosDashboardPage({ searchParams }: { searchParam
       libraryCsv: csvOf.get(j.id) ?? null,
       format: j.format,
       questions: j.questions,
-      badge: j.settings.quiz_badge || (facts ? "AMAZING FACTS" : d.badge),
+      badge: j.settings.quiz_badge || (flags ? "FLAG MEMORY CHALLENGE" : facts ? "AMAZING FACTS" : d.badge),
       badgeIsDefault: !j.settings.quiz_badge,
-      introTag: j.settings.intro_badge || (facts ? "DID YOU KNOW?" : d.introTag),
+      introTag: j.settings.intro_badge || (flags ? "MEMORY GAME" : facts ? "DID YOU KNOW?" : d.introTag),
       introTitle: lines.join(" / "),
       introIsDefault: !j.settings.intro_badge && !j.settings.title_lines?.length,
       seconds: j.settings.timer_seconds ?? null,

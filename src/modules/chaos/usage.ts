@@ -257,7 +257,7 @@ export function writeVideoCsv(): boolean {
       [
         job?.title ?? r.name,
         r.id,
-        job ? (job.kind === "facts" ? "facts" : "quiz") : /^Edu/i.test(r.name) ? "edu" : "",
+        job ? (job.kind === "facts" || job.kind === "flags" ? job.kind : "quiz") : /^Edu/i.test(r.name) ? "edu" : "",
         job?.format ?? "",
         job?.status.stage ?? (r.id ? "deleted" : ""),
         r.images,

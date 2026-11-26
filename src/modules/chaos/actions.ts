@@ -11,6 +11,10 @@ export async function createVideoAction(prev: ActionState, fd: FormData): Promis
   return h.createVideoAction(prev, fd);
 }
 
+export async function createFlagsVideoAction(prev: ActionState, fd: FormData): Promise<ActionState> {
+  return h.createFlagsVideoAction(prev, fd);
+}
+
 export async function createFactsVideoAction(prev: ActionState, fd: FormData): Promise<ActionState> {
   return h.createFactsVideoAction(prev, fd);
 }

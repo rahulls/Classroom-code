@@ -5,6 +5,7 @@ import path from "node:path";
 import { UserError } from "@/core/action";
 import { decrypt, encrypt } from "@/core/crypto";
 import { DEFAULT_CATEGORY } from "./csv";
+import { flagsYoutubeDefaults } from "./flags";
 import { CHAOS_HOME, getJob, getYoutubeMeta, imageCredit, jobDir, jobFacts, jobQuestions, musicCheck, setMark, thumbPath, videoPath, type JobView, type YoutubeMeta } from "./jobs";
 
 // Publishing Chaos Creators videos to YouTube (YouTube Data API v3).
@@ -542,6 +543,16 @@ function chapterLines(job: JobView, labels: "full" | "short"): string[] | null {
   const end = job.status.result?.duration;
   if (job.format !== "youtube" || !ch?.length || !end) return null;
   if (job.kind === "facts") return factChapterLines(job, ch, end, labels);
+  if (job.kind === "flags") {
+    // Intro, then one chapter per round, then the score
+    const out: { t: number; label: string }[] = [{ t: 0, label: "How to play" }];
+    for (const c of ch) {
+      if (c.kind === "round" && c.q != null) out.push({ t: c.t, label: `Round ${c.q + 1}` });
+      else if (c.kind === "outro") out.push({ t: c.t, label: "Your score" });
+    }
+    const ok = out.length >= 3 && out.every((c, k) => (out[k + 1]?.t ?? end) - c.t >= 10);
+    return ok ? out.map((c) => `${stamp(c.t)} ${clean(c.label)}`) : null;
+  }
   const qs = jobQuestions(job.id);
   const parts = ch.map((c, i) => ({ ...c, len: (ch[i + 1]?.t ?? end) - c.t }));
   const out: { t: number; label: string }[] = [];
@@ -615,6 +626,14 @@ function suggestedFactsMeta(job: JobView): Omit<UploadMeta, "privacy" | "madeFor
 
 export function suggestedMeta(job: JobView): Omit<UploadMeta, "privacy" | "madeForKids" | "useThumbnail"> {
   if (job.kind === "facts") return suggestedFactsMeta(job);
+  if (job.kind === "flags") {
+    const f = job.flags;
+    const opt = { show: f?.show ?? 10, find: f?.find ?? 5, grid: f?.grid ?? 30, flagSeconds: f?.flag_seconds ?? 1, searchSeconds: f?.search_seconds ?? 30 };
+    const m = flagsYoutubeDefaults(f?.level ?? "easy", job.questions, opt, job.format === "shorts");
+    const ch = chapterLines(job, "short");
+    const description = ch ? m.description.replace("\n\n", `\n\n${ch.join("\n")}\n\n`) : m.description;
+    return { title: clean(m.title), description: clean(description), tags: m.tags };
+  }
   const badge = titleCase(job.settings.quiz_badge || "GK Quiz");
   const n = job.questions;
   const secs = job.settings.timer_seconds ?? 5;

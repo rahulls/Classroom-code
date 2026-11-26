@@ -9,6 +9,8 @@ import { cardState, listDrafts, type FactsDraft } from "@/modules/chaos/facts-dr
 import { deleteDraftAction, deleteVideoAction } from "@/modules/chaos/actions";
 import { makeVideoHref } from "./csv/links";
 import { FactsStudio } from "./facts-studio";
+import { FlagsStudio } from "./flags-studio";
+import { readFlagsLog } from "@/modules/chaos/flags-log";
 import { Studio } from "./studio";
 
 export const metadata = { title: "Studio" };
@@ -16,9 +18,10 @@ export const metadata = { title: "Studio" };
 export default async function ChaosStudioPage({ searchParams }: { searchParams: Promise<{ type?: string; csv?: string }> }) {
   const sp = await searchParams;
   const facts = sp.type === "facts";
+  const flags = sp.type === "flags";
   // "Make video" on the dashboard: open with that library CSV loaded (on the tab its kind belongs to)
   const lib = sp.csv ? readLibraryCsv(sp.csv) : null;
-  if (lib && (lib.kind === "facts") !== facts) redirect(makeVideoHref(lib.name, lib.kind));
+  if (lib && !flags && (lib.kind === "facts") !== facts) redirect(makeVideoHref(lib.name, lib.kind));
   const initial = lib ? { name: lib.name, content: lib.content } : undefined;
   const jobs = listJobs();
   const ready = engineReady();
@@ -27,11 +30,13 @@ export default async function ChaosStudioPage({ searchParams }: { searchParams: 
     <>
       <h1 className="mb-1 text-2xl font-bold text-[#2a1260]">Make a video</h1>
       <p className="mb-4 text-sm text-muted">
-        {facts
+        {flags
+          ? "A memory game: flags flash by, then viewers find some of them hidden in a grid of flags. Pick a level, preview the flags, and the studio draws the whole video."
+          : facts
           ? "Upload your facts (or let Claude write them), choose who reads them, and the studio builds the video with pictures, music and the kid voice."
           : "Upload your questions, pick a format, and the studio builds the video with narration, timer, sounds and confetti."}
       </p>
-      <TypeTabs facts={facts} />
+      <TypeTabs type={flags ? "flags" : facts ? "facts" : "quiz"} />
       {sp.csv && !lib && <p className="card mb-4 border-warn text-sm text-warn">“{sp.csv}” isn&apos;t in the csv folder any more. Upload it below instead.</p>}
       {!ready.ok && <p className="card mb-4 border-bad text-sm text-bad">{ready.problem}</p>}
       {busy && (
@@ -39,7 +44,13 @@ export default async function ChaosStudioPage({ searchParams }: { searchParams: 
           <b className="text-warn">“{busy.title}” is being made ({Math.round(busy.status.percent)}%).</b> Open it to watch the progress →
         </Link>
       )}
-      {facts ? (
+      {flags ? (
+        <FlagsStudio
+          busy={!!busy}
+          seed={Date.now() % 1_000_000_000}
+          made={readFlagsLog().map((v) => ({ jobId: v.jobId, title: v.title, level: v.level, createdAt: v.createdAt, shown: v.rounds.flatMap((r) => r.show) }))}
+        />
+      ) : facts ? (
         <>
           <Decks />
           <FactsStudio key={initial?.name} busy={!!busy} claudeKey={claudeKeyStatus().ok} canva={canvaConnection().connected} initial={initial} />
@@ -70,13 +81,14 @@ export default async function ChaosStudioPage({ searchParams }: { searchParams: 
 }
 
 /** Quiz video or facts video: two tabs (the address keeps the choice, so a reload stays on it). */
-function TypeTabs({ facts }: { facts: boolean }) {
+function TypeTabs({ type }: { type: "quiz" | "facts" | "flags" }) {
   const tabs = [
-    { href: "/chaos", on: !facts, icon: "🧠", title: "Quiz video", text: "Questions, four options, a timer and the answer reveal" },
-    { href: "/chaos?type=facts", on: facts, icon: "💡", title: "Facts video", text: "“Did you know?” facts, read by the AI voice or recorded by you" },
+    { href: "/chaos", on: type === "quiz", icon: "🧠", title: "Quiz video", text: "Questions, four options, a timer and the answer reveal" },
+    { href: "/chaos?type=facts", on: type === "facts", icon: "💡", title: "Facts video", text: "“Did you know?” facts, read by the AI voice or recorded by you" },
+    { href: "/chaos?type=flags", on: type === "flags", icon: "🚩", title: "Flag memory game", text: "Flags flash by, then find them in a grid of flags" },
   ];
   return (
-    <div className="mb-5 grid gap-3 sm:grid-cols-2" role="tablist">
+    <div className="mb-5 grid gap-3 sm:grid-cols-3" role="tablist">
       {tabs.map((t) => (
         <Link
           key={t.href}
@@ -160,8 +172,8 @@ function VideoCard({ job }: { job: JobView }) {
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold">{job.title}</span>
           <span className="block text-xs text-muted">
-            {job.kind === "facts" ? "💡 Facts · " : ""}
-            {FORMATS[job.format].label} · {job.questions} {job.kind === "facts" ? "fact" : "question"}
+            {job.kind === "facts" ? "💡 Facts · " : job.kind === "flags" ? "🚩 Flags · " : ""}
+            {FORMATS[job.format].label} · {job.questions} {job.kind === "facts" ? "fact" : job.kind === "flags" ? "round" : "question"}
             {job.questions === 1 ? "" : "s"}
             {r ? ` · ${fmtDuration(r.duration)}` : ""}
           </span>

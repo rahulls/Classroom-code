@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { IMAGE_NAME_RE, parseQuizCsv, type QuizQuestion, type VideoFormat } from "./csv";
 import { detectCsvType, parseFactsCsv, type FactItem } from "./facts";
+import type { FlagLevel, FlagOptions, FlagRound } from "./flags";
 
 // Chaos Creators video jobs. Nothing goes in the database: each job is a folder under
 // %LOCALAPPDATA%\RSC Classroom\chaos\jobs\<id> (outside OneDrive, videos are big) holding
@@ -19,6 +20,9 @@ const ENGINE = path.join(process.cwd(), "src", "Chaos creators", "engine", "quiz
 const THUMBNAILER = path.join(path.dirname(ENGINE), "thumbnail.py");
 /** "Did you know?" facts videos: their own engine (it imports quiz_video.py's helpers) */
 const FACTS_ENGINE = path.join(path.dirname(ENGINE), "facts_video.py");
+/** Flag Memory Challenge videos (flags_video.py) */
+const FLAGS_ENGINE = path.join(path.dirname(ENGINE), "flags_video.py");
+const engineOf = (kind: JobSpec["kind"]) => (kind === "facts" ? FACTS_ENGINE : kind === "flags" ? FLAGS_ENGINE : ENGINE);
 export const ENGINE_DIR = path.dirname(ENGINE);
 export const CHAOS_ASSETS = path.join(process.cwd(), "src", "Chaos creators");
 /**
@@ -87,8 +91,11 @@ export type JobSettings = {
 
 export type JobSpec = {
   id: string;
-  /** "facts" = a Did-you-know facts video (facts_video.py); missing = a quiz video. `questions` then counts facts. */
-  kind?: "quiz" | "facts";
+  /** "facts" = a Did-you-know facts video (facts_video.py); "flags" = a Flag Memory Challenge
+   *  (flags_video.py; `questions` counts rounds); missing = a quiz video. `questions` then counts facts. */
+  kind?: "quiz" | "facts" | "flags";
+  /** Flag Memory Challenge: the level and sizes (the flags of each round are in rounds.json) */
+  flags?: { level: FlagLevel; show: number; find: number; grid: number; flag_seconds: number; search_seconds: number };
   /** Facts videos: who read the facts */
   narration?: "ai" | "record";
   title: string;
@@ -128,7 +135,7 @@ export type JobStatus = {
     height: number;
     render_seconds: number;
     /** Start of each part of the video (videos made before Nov 2026 don't have it) */
-    chapters?: { t: number; kind: "intro" | "q" | "fact" | "ranks" | "outro"; q: number | null }[];
+    chapters?: { t: number; kind: "intro" | "q" | "fact" | "round" | "ranks" | "outro"; q: number | null }[];
     /** Attribution lines for Creative Commons music the video used (from sounds/CREDITS.json) */
     credits?: string[];
     /** Sound files used, by kind: music is "<mood>/<file>" under sounds/music */
@@ -242,7 +249,7 @@ export function startEngine(id: string): boolean {
   fs.writeFileSync(path.join(dir, "progress.json"), JSON.stringify({ stage: "queued", percent: 0, message: "Starting…", elapsed: 0, done: 0, total: 0 }), "utf8");
   // The "stopped unexpectedly" check counts from when the engine started
   full.engineStartedAt = new Date().toISOString();
-  full.pid = spawnEngine(full.kind === "facts" ? FACTS_ENGINE : ENGINE, dir);
+  full.pid = spawnEngine(engineOf(full.kind), dir);
   fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify(full, null, 1), "utf8");
   return true;
 }
@@ -390,6 +397,51 @@ export function createFactsJob(input: {
   return { ...spec, status: statusOf(dir, spec) };
 }
 
+/**
+ * A Flag Memory Challenge video (flags_video.py): rounds of flags picked (and previewed) in the
+ * studio's Flags tab. No Canva: the engine draws everything, the thumbnail included.
+ */
+export function createFlagsJob(input: {
+  title: string;
+  format: VideoFormat;
+  level: FlagLevel;
+  options: FlagOptions;
+  rounds: FlagRound[];
+  settings: JobSettings;
+  userId: string;
+  youtube?: Partial<YoutubeMeta>;
+}): JobView {
+  const id = `${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
+  const dir = jobDir(id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "rounds.json"), JSON.stringify(input.rounds, null, 1), "utf8");
+  const o = input.options;
+  const spec: JobSpec = {
+    id,
+    kind: "flags",
+    title: input.title,
+    format: input.format,
+    questions: input.rounds.length,
+    settings: input.settings,
+    flags: { level: input.level, show: o.show, find: o.find, grid: o.grid, flag_seconds: o.flagSeconds, search_seconds: o.searchSeconds },
+    createdAt: new Date().toISOString(),
+    createdBy: input.userId,
+    exportName: exportName(input.title, input.format, new Date()),
+  };
+  const engineSpec = { format: input.format, settings: input.settings, models_dir: path.join(CHAOS_HOME, "models"), export_dir: VIDEO_FOLDER, export_name: spec.exportName };
+  if (input.youtube && (input.youtube.title || input.youtube.description || input.youtube.tags?.length || input.youtube.category)) saveYoutubeMeta(id, input.youtube);
+  // job.json first: the engine reads it as soon as it starts (then again with its pid)
+  fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify({ ...spec, ...engineSpec }, null, 1), "utf8");
+  spec.pid = spawnEngine(FLAGS_ENGINE, dir);
+  fs.writeFileSync(path.join(dir, "job.json"), JSON.stringify({ ...spec, ...engineSpec }, null, 1), "utf8");
+  return { ...spec, status: statusOf(dir, spec) };
+}
+
+/** A flags video's rounds (rounds.json written by createFlagsJob). */
+export function jobFlagRounds(id: string): FlagRound[] {
+  return readJson<FlagRound[]>(path.join(jobDir(id), "rounds.json")) ?? [];
+}
+
 /** A facts video's facts as the engine got them (facts.csv written by createFactsJob). */
 export function jobFacts(id: string): FactItem[] {
   try {
@@ -443,8 +495,8 @@ export function jobQuestions(id: string): QuizQuestion[] {
 
 /** Designs a new thumbnail (about a second). A new seed gives a different design. */
 export function designThumbnail(id: string, seed = Math.floor(Math.random() * 1_000_000)) {
-  const facts = getJob(id)?.kind === "facts";
-  const r = spawnSync(PYTHON, facts ? [FACTS_ENGINE, "thumbnail", jobDir(id), String(seed)] : [THUMBNAILER, jobDir(id), String(seed)], {
+  const kind = getJob(id)?.kind;
+  const r = spawnSync(PYTHON, kind === "facts" || kind === "flags" ? [engineOf(kind), "thumbnail", jobDir(id), String(seed)] : [THUMBNAILER, jobDir(id), String(seed)], {
     cwd: path.dirname(THUMBNAILER),
     windowsHide: true,
     timeout: 60_000,

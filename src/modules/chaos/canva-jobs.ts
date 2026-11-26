@@ -82,6 +82,14 @@ const SIZE = { youtube: { w: 1280, h: 720, thumb: "YouTube Thumbnail", screen: "
 
 export function thumbnailBrief(job: JobView, seed = Math.random()) {
   if (job.kind === "facts") return factsThumbnailBrief(job, seed);
+  if (job.kind === "flags") {
+    const s = SIZE[job.format];
+    return [
+      `A bold, eye-catching YouTube ${job.format === "shorts" ? "Shorts cover" : "thumbnail"} (${s.w}x${s.h} px) for a "Flag Memory Challenge" video.`,
+      `Big text: "CAN YOU FIND ${job.flags?.find ?? 5} FLAGS?" and a smaller badge "FLAG MEMORY CHALLENGE". Show a colourful grid of world flags with one glowing green, on a night-blue background with a glowing globe.`,
+      "Keep the bottom-right corner free of text. No people.",
+    ].join("\n");
+  }
   const qs = jobQuestions(job.id);
   const short = qs.filter((q) => q.question.length <= 80 && Math.max(...q.options.map((o) => o.length)) <= 22);
   const pool = short.length ? short : qs;
