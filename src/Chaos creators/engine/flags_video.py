@@ -418,7 +418,8 @@ def build_timeline(cfg, opt, rounds, voice, job, sounds, kid=None):
         cues.append(t)                           # the title comes with the kid's hook
         t += play(t, hook) + 0.35
     keys = ["flags_intro", "flags_rule1" if N == 10 else None, "flags_rule2" if (K, G_) == (5, 30) else None,
-            "flags_rule3" if SS == 30 else None, "flags_rule4"]
+            # 30 s: flags_rule3_… ("thirty seconds"); other times: flags_rule3s<seconds>_… e.g. flags_rule3s15_.m4a
+            "flags_rule3" if SS == 30 else f"flags_rule3s{SS}", "flags_rule4"]
     for i, line in enumerate(lines):
         if i or hook is None:
             cues.append(t)
